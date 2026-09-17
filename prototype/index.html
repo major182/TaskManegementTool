@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>タスク管理ツール（プロトタイプ）</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- サイドバー -->
+    <aside class="sidebar">
+      <div class="sidebar-title">タスク管理</div>
+      <div class="sidebar-label">ボード</div>
+      <ul id="board-nav" class="board-nav"></ul>
+      <button id="create-board" class="sidebar-add" type="button">＋ ボードを作成</button>
+      <button id="trash-nav" class="sidebar-trash" type="button">🗑 ゴミ箱</button>
+      <p class="sidebar-note">※プロトタイプのため、データは保存されません。再読み込みすると最初の状態に戻ります。</p>
+    </aside>
+
+    <!-- 表示エリア -->
+    <main class="board">
+      <header class="board-header">
+        <h1 id="board-name" class="board-name"></h1>
+        <button id="delete-board" class="board-delete" type="button">ボードを削除</button>
+      </header>
+      <div id="lists" class="lists"></div>
+    </main>
+  </div>
+
+  <!-- 確認ダイアログ -->
+  <dialog id="confirm-dialog" class="modal modal-small">
+    <div class="modal-body">
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="modal-actions">
+        <button id="confirm-cancel" class="btn" type="button">キャンセル</button>
+        <button id="confirm-ok" class="btn btn-danger" type="button">完全に削除する</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
