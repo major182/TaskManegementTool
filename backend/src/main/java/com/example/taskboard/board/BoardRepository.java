@@ -15,4 +15,13 @@ public interface BoardRepository extends JpaRepository<Board, Long> {
      * 取得してから確認する形にすると確認漏れが起きるため、条件側で絞る。
      */
     Optional<Board> findByIdAndUserIdAndDeletedAtIsNull(Long id, Long userId);
+
+    /** リストを戻せるかの判定用。ゴミ箱に入っているかは問わず、自分のボードかだけを見る。 */
+    boolean existsByIdAndUserId(Long id, Long userId);
+
+    /** ゴミ箱のボード（削除日時の新しい順。docs/04_api-design.md 4.14）。 */
+    List<Board> findByUserIdAndDeletedAtIsNotNullOrderByDeletedAtDesc(Long userId);
+
+    /** ゴミ箱から「元に戻す」「完全に削除」するときの1件取得。 */
+    Optional<Board> findByIdAndUserIdAndDeletedAtIsNotNull(Long id, Long userId);
 }

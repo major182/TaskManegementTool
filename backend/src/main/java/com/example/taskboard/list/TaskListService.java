@@ -7,8 +7,10 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.taskboard.board.BoardRepository;
 import com.example.taskboard.board.BoardService;
 import com.example.taskboard.common.BadRequestException;
+import com.example.taskboard.common.ConflictException;
 import com.example.taskboard.common.NotFoundException;
 
 /**
@@ -24,10 +26,14 @@ public class TaskListService {
 
     private final TaskListRepository taskListRepository;
     private final BoardService boardService;
+    private final BoardRepository boardRepository;
 
-    public TaskListService(TaskListRepository taskListRepository, BoardService boardService) {
+    public TaskListService(TaskListRepository taskListRepository,
+                           BoardService boardService,
+                           BoardRepository boardRepository) {
         this.taskListRepository = taskListRepository;
         this.boardService = boardService;
+        this.boardRepository = boardRepository;
     }
 
     /**
@@ -91,6 +97,61 @@ public class TaskListService {
         renumberBoard(list.getBoardId(), lists);
 
         return lists;
+    }
+
+    /**
+     * ゴミ箱から元に戻す（F-42）。元のボードの一番右に戻る
+     * （docs/01-3_business-rules.md 5.3。削除時に詰め直すので元の位置は残っていない）。
+     * 個別にゴミ箱へ入れたカードは戻らない（docs/03_db-design.md 1.1）。
+     *
+     * @throws ConflictException 元のボードがゴミ箱にある・完全に削除されているとき
+     */
+    @Transactional
+    public TaskList restore(Long userId, Long listId) {
+        TaskList list = taskListRepository.findTrashedById(listId, userId)
+                .orElseThrow(() -> trashedNotFoundOrUnrestorable(userId, listId));
+
+        list.restore();
+
+        // 表示するリストの末尾に置いてから振り直す
+        List<TaskList> lists = liveLists(list.getBoardId());
+        lists.removeIf(sibling -> sibling.getId().equals(listId));
+        lists.add(list);
+        renumberBoard(list.getBoardId(), lists);
+
+        return list;
+    }
+
+    /** 完全に削除（F-43）。中のカードは ON DELETE CASCADE で一緒に消える。 */
+    @Transactional
+    public void deletePermanently(Long userId, Long listId) {
+        taskListRepository.delete(taskListRepository.findTrashedById(listId, userId)
+                .orElseThrow(() -> new NotFoundException("ゴミ箱にリストが見つかりません")));
+    }
+
+    /** ゴミ箱に表示するリスト（削除日時の新しい順）。 */
+    @Transactional(readOnly = true)
+    public List<TaskList> findTrashed(Long userId) {
+        return taskListRepository.findTrashed(userId);
+    }
+
+    /** ゴミ箱を空にする（F-44）。 */
+    @Transactional
+    public void deleteAllTrashed(Long userId) {
+        taskListRepository.deleteTrashed(userId);
+    }
+
+    /**
+     * 「見つからない」と「元のボードがないから戻せない」を区別する。
+     * 画面には理由を出したいが、他人のデータの存在は知らせたくないため、
+     * 自分のボードのリストだと分かるときだけ 409 にする。
+     */
+    private RuntimeException trashedNotFoundOrUnrestorable(Long userId, Long listId) {
+        return taskListRepository.findById(listId)
+                .filter(list -> list.getDeletedAt() != null)
+                .filter(list -> boardRepository.existsByIdAndUserId(list.getBoardId(), userId))
+                .<RuntimeException>map(list -> new ConflictException("元のボードがないため戻せません"))
+                .orElseGet(() -> new NotFoundException("ゴミ箱にリストが見つかりません"));
     }
 
     /**

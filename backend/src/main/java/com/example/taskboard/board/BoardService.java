@@ -122,6 +122,47 @@ public class BoardService {
     }
 
     /**
+     * ゴミ箱から元に戻す（F-42）。
+     * 個別にゴミ箱へ入れた子は戻らない。deleted_at を子へ伝播させていないため、
+     * ボードの deleted_at を空にするだけで要件どおりの動きになる（docs/03_db-design.md 1.1）。
+     * ボードは作成日順に表示するので、並び位置を気にする必要もない。
+     */
+    @Transactional
+    public Board restore(Long userId, Long boardId) {
+        Board board = requireTrashed(userId, boardId);
+        board.restore();
+        return board;
+    }
+
+    /** 完全に削除（F-43）。中のリスト・カードは ON DELETE CASCADE で一緒に消える。 */
+    @Transactional
+    public void deletePermanently(Long userId, Long boardId) {
+        boardRepository.delete(requireTrashed(userId, boardId));
+    }
+
+    /** ゴミ箱のボード（削除日時の新しい順）。 */
+    @Transactional(readOnly = true)
+    public List<Board> findTrashed(Long userId) {
+        return boardRepository.findByUserIdAndDeletedAtIsNotNullOrderByDeletedAtDesc(userId);
+    }
+
+    /** ゴミ箱を空にする（F-44）。ボードごと消すので、中のリスト・カードも一緒に消える。 */
+    @Transactional
+    public void deleteAllTrashed(Long userId) {
+        boardRepository.deleteAll(findTrashed(userId));
+    }
+
+    /**
+     * 自分のもので、かつゴミ箱に入っているボードを取り出す。
+     *
+     * @throws NotFoundException 存在しない・他人のもの・ゴミ箱に入っていないとき
+     */
+    public Board requireTrashed(Long userId, Long boardId) {
+        return boardRepository.findByIdAndUserIdAndDeletedAtIsNotNull(boardId, userId)
+                .orElseThrow(() -> new NotFoundException("ゴミ箱にボードが見つかりません"));
+    }
+
+    /**
      * 自分のもので、かつゴミ箱に入っていないボードを取り出す。
      * リストやカードの Service からも「親のボードが自分のものか」の確認に使う。
      *
