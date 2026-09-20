@@ -67,6 +67,34 @@ public class Card {
         this.position = position;
     }
 
+    /**
+     * タイトル・説明文・期限日・完了をまとめて更新する（F-32、F-35、F-38）。
+     * 4項目すべてを受け取る形にして、null を「消す」の意味だけに使えるようにしている
+     * （docs/04_api-design.md 3.4 の補足）。
+     */
+    public void update(String title, String description, LocalDate dueDate, boolean done) {
+        this.title = title;
+        this.description = description;
+        this.dueDate = dueDate;
+        this.done = done;
+    }
+
+    /** 別のリストへ移す（F-34）。同じリスト内の並び替えでも使う。 */
+    public void moveTo(Long listId, int position) {
+        this.listId = listId;
+        this.position = position;
+    }
+
+    /** 並び順の付け替え。詰め直し・並び替えのどちらでも使う。 */
+    public void moveTo(int position) {
+        this.position = position;
+    }
+
+    /** ゴミ箱へ移動（F-33）。 */
+    public void moveToTrash(Instant deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
     @PreUpdate
     void onUpdate() {
         this.updatedAt = Instant.now();
