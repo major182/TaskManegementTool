@@ -1,0 +1,24 @@
+# 開発用 PostgreSQL（docs/02_tech-stack.md 3.3）
+# 起動: docker compose up -d   停止: docker compose down
+# データごと消す: docker compose down -v
+services:
+  db:
+    image: postgres:17
+    container_name: taskboard-db
+    environment:
+      POSTGRES_DB: taskboard
+      POSTGRES_USER: taskboard
+      POSTGRES_PASSWORD: taskboard
+      TZ: Asia/Tokyo
+    ports:
+      - "5432:5432"
+    volumes:
+      - taskboard-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskboard -d taskboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  taskboard-db-data:

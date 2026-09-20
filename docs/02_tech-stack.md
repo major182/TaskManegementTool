@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.6（ドラフト） |
+| ドキュメント版数 | 0.7（ドラフト） |
 | 作成日 | 2026-09-17 |
 | 最終更新日 | 2026-09-20 |
 | 作成者 | （氏名） |
@@ -88,7 +88,7 @@ TaskManegementTool/
 | ドラッグ＆ドロップ | dnd-kit | React 向けで現在も保守されている。カードのリスト間移動とリスト並び替えの両方に対応（react-beautiful-dnd は保守終了） |
 | スタイル | CSS Modules | プロトタイプの CSS をほぼそのまま使え、クラス名の衝突も防げる |
 | テスト | Vitest ＋ React Testing Library | Vite と設定を共有でき、Jest と同じ書き方ができる |
-| コード整形・チェック | ESLint ＋ Prettier | 書き方のばらつきとミスを自動で防ぐ |
+| コード整形・チェック | oxlint ＋ Prettier | Vite の React + TypeScript テンプレートの既定が ESLint から oxlint に変わったため、そのまま採用した。設定なしで動き、ESLint より大幅に速い（v0.7 で ESLint から変更） |
 
 ### 3.3 データベース
 | 役割 | 技術 | 選んだ理由 |
@@ -106,6 +106,26 @@ TaskManegementTool/
 | 公開先（フロントエンド） | Vercel | 無料で静的サイトを HTTPS 公開でき、GitHub と連携して自動デプロイできる |
 | 公開先（バックエンド） | Render（Docker で公開） | Java（Spring Boot）を無料プランで動かせる。※しばらくアクセスがないと停止し、次のアクセスで起動に数十秒かかる |
 | 公開先（データベース） | Neon | PostgreSQL を無料で使え、Render の無料 DB のような利用期限がない |
+
+### 3.5 実装時に確定したバージョン（2026-09-20）
+
+実際に環境を作ったときの版数です。
+
+| 項目 | 版数 | 備考 |
+|---|---|---|
+| Java | Temurin 21.0.12（LTS） | `JAVA_HOME` に設定して使う |
+| Spring Boot | 4.1.1 | Spring Initializr の既定（最新の安定版） |
+| Gradle | 9.7.1 | Wrapper に同梱。PC への導入は不要 |
+| PostgreSQL | 17 | `compose.yaml` と Testcontainers の両方で 17 に固定し、開発とテストの差をなくす |
+| springdoc-openapi | 3.0.0 | Spring Boot 4 に対応した系列 |
+| Node.js | 24（LTS） | |
+| Vite | 8 / React 19 / TypeScript 6 | |
+
+> **Spring Boot 4 で変わった点（実装でつまずいた箇所）**
+> - JSON の処理が **Jackson 3** になり、パッケージが `com.fasterxml.jackson` から `tools.jackson` に変わった。`ObjectMapper` を自分で使うときは import 先に注意する
+> - `spring.jackson.serialization.write-dates-as-timestamps` は廃止された。日時は既定で ISO 8601 の文字列になるため、指定は不要（[04 API設計書 2.1](04_api-design.md#21-基本) の形式をそのまま満たす）
+> - テスト用の `@AutoConfigureMockMvc` が `org.springframework.boot.webmvc.test.autoconfigure` に移動した
+> - 依存の名前が機能ごとに分かれた（例：`spring-boot-starter-web` → `spring-boot-starter-webmvc`）
 
 ---
 
@@ -168,6 +188,7 @@ TaskManegementTool/
 ## 改訂履歴
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.7 | 2026-09-20 | 実装開始にあたり、3.5「実装時に確定したバージョン」を追加。コード整形・チェックを ESLint から oxlint に変更（Vite テンプレートの既定に合わせた） | |
 | 0.6 | 2026-09-20 | 2.2 フォルダ構成に README.md と docs/ フォルダを反映（ドキュメントを docs/ に移動） | |
 | 0.5 | 2026-09-20 | セッションの保存先を Spring Security の既定（メモリ）と明記（[04 API設計書](04_api-design.md) の決定を反映） | |
 | 0.4 | 2026-09-20 | ビルドツールを Maven から Gradle（Kotlin DSL）に変更。「選ばなかった技術」も入れ替え | |

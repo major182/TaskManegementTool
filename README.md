@@ -3,7 +3,7 @@
 プログラミングスクールの課題として開発している、Trello 風のタスク管理 Web アプリです。
 「ボード・リスト・カード」の形でタスクを見える化し、ドラッグ＆ドロップで進み具合を管理できます。
 
-**現在の進捗：基本設計まで完了。次は詳細設計で、実装はまだ始まっていません。**
+**現在の進捗：実装フェーズに着手。バックエンドの土台と認証 API（新規登録・ログイン・ログアウト）まで動作しています。**
 
 ---
 
@@ -18,8 +18,8 @@
 | プロトタイプ | [prototype/](prototype/)（HTML／CSS／JavaScript） | ✅ 完了 |
 | 技術選定 | [02 技術選定書](docs/02_tech-stack.md) | ✅ 完了 |
 | 基本設計 | [03 DB設計書](docs/03_db-design.md)、[04 API設計書](docs/04_api-design.md)、[05 画面設計書](docs/05_screen-design.md) | ✅ 完了 |
-| 詳細設計 | 処理の流れ、フォルダ構成 | 🚧 次はここ |
-| 実装 | `backend/`、`frontend/` | ⬜ 未着手 |
+| 実装（土台＋認証） | `backend/`（Spring Boot）、`frontend/`（React） | 🚧 進行中（認証 API まで完了） |
+| 実装（ボード・リスト・カード・ゴミ箱） | `backend/`、`frontend/` | ⬜ 未着手 |
 | テスト | テスト項目表・結果 | ⬜ 未着手 |
 | リリース | 公開 URL | ⬜ 未着手 |
 
@@ -62,7 +62,7 @@
 
 ---
 
-## 技術スタック（予定）
+## 技術スタック
 
 バックエンド・フロントエンド・DB は課題での指定、それ以外は [02 技術選定書](docs/02_tech-stack.md) で選定しています。
 
@@ -84,9 +84,48 @@ TaskManegementTool/
 ├── README.md         … このファイル
 ├── docs/             … 要件定義・設計ドキュメント
 ├── prototype/        … 画面イメージ確認用の試作（HTML／CSS／JavaScript）
-├── backend/          … Spring Boot（今後追加）
-└── frontend/         … React（今後追加）
+├── backend/          … Spring Boot（Gradle）
+├── frontend/         … React（Vite）
+└── compose.yaml      … 開発用 PostgreSQL
 ```
+
+---
+
+## 開発環境の動かし方
+
+必要なもの：JDK 21、Node.js 20 以上、Docker Desktop（Windows では WSL2 も必要）。
+
+### 1. データベースを起動する
+
+```bash
+docker compose up -d
+```
+
+PostgreSQL 17 が `localhost:5432` で起動します（DB 名・ユーザー・パスワードはすべて `taskboard`）。
+止めるときは `docker compose down`、データごと消すときは `docker compose down -v` です。
+
+### 2. バックエンドを起動する
+
+```bash
+cd backend
+./gradlew bootRun --args='--spring.profiles.active=local'
+```
+
+`http://localhost:8080` で起動します。テーブルは起動時に Flyway が自動で作ります。
+`local` プロファイルは、開発中（HTTP）でもログイン用の Cookie が届くようにするための指定です。
+
+- API を画面から試す：<http://localhost:8080/swagger-ui.html>
+- テストを流す：`./gradlew test`（Testcontainers が PostgreSQL を起動するので Docker が必要）
+
+### 3. フロントエンドを起動する
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+<http://localhost:5173> で開きます。`/api` への通信はバックエンドへ自動で転送されます。
 
 ---
 
