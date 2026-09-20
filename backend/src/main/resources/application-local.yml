@@ -1,0 +1,8 @@
+# 開発用プロファイル（http://localhost で動かすとき）
+# Secure 属性の Cookie は HTTPS でないとブラウザが送らないため、開発中だけ外す
+server:
+  servlet:
+    session:
+      cookie:
+        same-site: lax
+        secure: false
