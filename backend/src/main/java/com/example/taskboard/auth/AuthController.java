@@ -19,6 +19,8 @@ import com.example.taskboard.auth.AuthDtos.LoginRequest;
 import com.example.taskboard.auth.AuthDtos.SignupRequest;
 import com.example.taskboard.auth.AuthDtos.UserResponse;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -30,6 +32,7 @@ import jakarta.validation.Valid;
  */
 @RestController
 @RequestMapping("/api/auth")
+@Tag(name = "認証", description = "新規登録・ログイン・ログアウト・ログイン状態の確認")
 public class AuthController {
 
     private final AuthService authService;
@@ -49,6 +52,7 @@ public class AuthController {
 
     /** 新規登録（F-05）。成功するとそのままログイン状態にする。 */
     @PostMapping("/signup")
+    @Operation(summary = "新規登録", description = "登録に成功するとそのままログイン状態になる")
     public ResponseEntity<UserResponse> signup(@Valid @RequestBody SignupRequest request,
                                                HttpServletRequest httpRequest,
                                                HttpServletResponse httpResponse) {
@@ -61,6 +65,7 @@ public class AuthController {
 
     /** ログイン（F-06）。どちらが違うかは知らせず、失敗はすべて 401 にする。 */
     @PostMapping("/login")
+    @Operation(summary = "ログイン", description = "失敗の理由は知らせず、すべて 401 を返す")
     public UserResponse login(@Valid @RequestBody LoginRequest request,
                               HttpServletRequest httpRequest,
                               HttpServletResponse httpResponse) {
@@ -73,6 +78,7 @@ public class AuthController {
 
     /** ログアウト（F-07）。セッションを破棄する。 */
     @PostMapping("/logout")
+    @Operation(summary = "ログアウト", description = "セッションを破棄する")
     public ResponseEntity<Void> logout(HttpServletRequest httpRequest) {
         HttpSession session = httpRequest.getSession(false);
         if (session != null) {
@@ -84,6 +90,7 @@ public class AuthController {
 
     /** ログイン状態の確認（F-08）。未ログインなら Security 設定により 401 が返る。 */
     @GetMapping("/me")
+    @Operation(summary = "ログイン状態の確認", description = "未ログインなら 401 を返す")
     public UserResponse me() {
         return UserResponse.from(authService.getById(currentUser.requireId()));
     }
