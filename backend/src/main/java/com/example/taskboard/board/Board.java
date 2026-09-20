@@ -2,6 +2,9 @@ package com.example.taskboard.board;
 
 import java.time.Instant;
 
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -33,10 +36,13 @@ public class Board {
     @Column(nullable = false, length = 50)
     private String name;
 
+    // DDL の DEFAULT now() が入れた値を、保存した直後に読み戻す
+    @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
     /** DDL の DEFAULT now() は挿入時だけなので、更新時は @PreUpdate で入れ直す。 */
+    @Generated(event = EventType.INSERT)
     @Column(name = "updated_at", nullable = false, insertable = false)
     private Instant updatedAt;
 

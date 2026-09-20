@@ -2,6 +2,9 @@ package com.example.taskboard.list;
 
 import java.time.Instant;
 
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -32,9 +35,12 @@ public class TaskList {
     @Column(nullable = false)
     private int position;
 
+    // DDL の DEFAULT now() が入れた値を、保存した直後に読み戻す
+    @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private Instant createdAt;
 
+    @Generated(event = EventType.INSERT)
     @Column(name = "updated_at", nullable = false, insertable = false)
     private Instant updatedAt;
 
