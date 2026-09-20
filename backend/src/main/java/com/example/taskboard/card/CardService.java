@@ -8,11 +8,15 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.taskboard.board.Board;
+import com.example.taskboard.board.BoardRepository;
 import com.example.taskboard.card.CardDtos.CardMoveResponse;
 import com.example.taskboard.card.CardDtos.CardMoveResponse.ListCards;
 import com.example.taskboard.common.BadRequestException;
+import com.example.taskboard.common.ConflictException;
 import com.example.taskboard.common.NotFoundException;
 import com.example.taskboard.list.TaskList;
+import com.example.taskboard.list.TaskListRepository;
 import com.example.taskboard.list.TaskListService;
 
 /**
@@ -29,10 +33,17 @@ public class CardService {
 
     private final CardRepository cardRepository;
     private final TaskListService taskListService;
+    private final TaskListRepository taskListRepository;
+    private final BoardRepository boardRepository;
 
-    public CardService(CardRepository cardRepository, TaskListService taskListService) {
+    public CardService(CardRepository cardRepository,
+                       TaskListService taskListService,
+                       TaskListRepository taskListRepository,
+                       BoardRepository boardRepository) {
         this.cardRepository = cardRepository;
         this.taskListService = taskListService;
+        this.taskListRepository = taskListRepository;
+        this.boardRepository = boardRepository;
     }
 
     /**
@@ -120,6 +131,79 @@ public class CardService {
         return new CardMoveResponse(List.of(
                 listCards(fromListId, source),
                 listCards(toListId, destination)));
+    }
+
+    /**
+     * ゴミ箱から元に戻す（F-42）。元のリストの一番下に戻る
+     * （docs/01-3_business-rules.md 5.3。削除時に詰め直すので元の位置は残っていない）。
+     *
+     * <p>元のリストがないときは、同じボードの一番左のリストに戻し、その旨を message で伝える。
+     * ボードにリストが1つもなければ戻す場所がないので 409 にする。
+     *
+     * @throws ConflictException 戻せる場所がないとき
+     */
+    @Transactional
+    public RestoreResult restore(Long userId, Long cardId) {
+        Card card = cardRepository.findById(cardId)
+                .filter(target -> target.getDeletedAt() != null)
+                .orElseThrow(() -> new NotFoundException("ゴミ箱にカードが見つかりません"));
+
+        TaskList originalList = taskListRepository.findById(card.getListId())
+                .orElseThrow(() -> new NotFoundException("ゴミ箱にカードが見つかりません"));
+        Board board = boardRepository.findById(originalList.getBoardId())
+                .filter(target -> target.getUserId().equals(userId))
+                .orElseThrow(() -> new NotFoundException("ゴミ箱にカードが見つかりません"));
+
+        if (board.getDeletedAt() != null) {
+            // ボードごとゴミ箱にあるときは、ボードを戻せばカードも一緒に戻る
+            throw new ConflictException("戻せる場所がないため戻せません");
+        }
+
+        String message = null;
+        Long toListId = originalList.getId();
+        if (originalList.getDeletedAt() != null) {
+            // 元のリストがゴミ箱にある。同じボードの一番左のリストに戻す
+            TaskList leftmost = taskListRepository
+                    .findByBoardIdAndDeletedAtIsNullOrderByPositionAsc(board.getId()).stream()
+                    .findFirst()
+                    .orElseThrow(() -> new ConflictException("戻せる場所がないため戻せません"));
+
+            toListId = leftmost.getId();
+            message = "元のリストがないため、一番左のリストに戻しました";
+        }
+
+        card.restore();
+
+        List<Card> cards = liveCards(toListId);
+        cards.removeIf(sibling -> sibling.getId().equals(cardId));
+        cards.add(card);
+        card.moveTo(toListId, cards.size() - 1);
+        renumberList(toListId, cards);
+
+        return new RestoreResult(card, message);
+    }
+
+    /** 完全に削除（F-43）。 */
+    @Transactional
+    public void deletePermanently(Long userId, Long cardId) {
+        cardRepository.delete(cardRepository.findTrashedById(cardId, userId)
+                .orElseThrow(() -> new NotFoundException("ゴミ箱にカードが見つかりません")));
+    }
+
+    /** ゴミ箱に表示するカード（削除日時の新しい順）。 */
+    @Transactional(readOnly = true)
+    public List<Card> findTrashed(Long userId) {
+        return cardRepository.findTrashed(userId);
+    }
+
+    /** ゴミ箱を空にする（F-44）。 */
+    @Transactional
+    public void deleteAllTrashed(Long userId) {
+        cardRepository.deleteTrashed(userId);
+    }
+
+    /** 元に戻した結果。message は「元のリストがないので別の場所に戻した」ときだけ入る。 */
+    public record RestoreResult(Card card, String message) {
     }
 
     /**

@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface CardRepository extends JpaRepository<Card, Long> {
 
@@ -28,4 +31,41 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
     /** ゴミ箱の分も含めたリスト内のカード数。まだ使われていない position を求めるのに使う。 */
     int countByListId(Long listId);
+
+    /**
+     * ゴミ箱に表示するカード（削除日時の新しい順）。
+     * 親のリスト・ボードがゴミ箱に入っている場合は、親の1件として表示するので含めない
+     * （docs/01-3_business-rules.md 5.3）。
+     */
+    @Query("""
+            select c from Card c
+            where c.deletedAt is not null
+              and exists (select 1 from TaskList l, Board b
+                          where l.id = c.listId and l.deletedAt is null
+                            and b.id = l.boardId and b.userId = :userId and b.deletedAt is null)
+            order by c.deletedAt desc
+            """)
+    List<Card> findTrashed(@Param("userId") Long userId);
+
+    /** ゴミ箱から「元に戻す」「完全に削除」するときの1件取得。親が生きていることも確認する。 */
+    @Query("""
+            select c from Card c
+            where c.id = :id
+              and c.deletedAt is not null
+              and exists (select 1 from TaskList l, Board b
+                          where l.id = c.listId and l.deletedAt is null
+                            and b.id = l.boardId and b.userId = :userId and b.deletedAt is null)
+            """)
+    Optional<Card> findTrashedById(@Param("id") Long id, @Param("userId") Long userId);
+
+    /** ゴミ箱を空にするときに、ゴミ箱のカードをまとめて消す（F-44）。 */
+    @Modifying
+    @Query("""
+            delete from Card c
+            where c.deletedAt is not null
+              and exists (select 1 from TaskList l, Board b
+                          where l.id = c.listId and l.deletedAt is null
+                            and b.id = l.boardId and b.userId = :userId and b.deletedAt is null)
+            """)
+    void deleteTrashed(@Param("userId") Long userId);
 }

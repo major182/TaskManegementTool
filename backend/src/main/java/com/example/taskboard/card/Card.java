@@ -95,6 +95,11 @@ public class Card {
         this.deletedAt = deletedAt;
     }
 
+    /** ゴミ箱から元に戻す（F-42）。 */
+    public void restore() {
+        this.deletedAt = null;
+    }
+
     @PreUpdate
     void onUpdate() {
         this.updatedAt = Instant.now();
