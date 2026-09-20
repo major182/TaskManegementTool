@@ -1,0 +1,24 @@
+/*
+ * 配色と基本の寸法。prototype/style.css から移植した（05 画面設計書 1章・10章）。
+ * 各コンポーネントの CSS Modules からは、この変数だけを参照する。
+ */
+:root {
+  /* 配色（プロトタイプそのまま） */
+  --sidebar-bg: #1d2b4f;
+  --sidebar-text: #dfe4f0;
+  --sidebar-active: #3b5cad;
+  --board-bg: #0079bf;
+  --list-bg: #ebecf0;
+  --card-bg: #ffffff;
+  --text: #172b4d;
+  --text-sub: #5e6c84;
+  --primary: #0c66e4;
+  --danger: #c9372c;
+  --placeholder: rgba(9, 30, 66, 0.15);
+
+  /* 寸法 */
+  --sidebar-width: 240px;
+  --list-width: 272px;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+}

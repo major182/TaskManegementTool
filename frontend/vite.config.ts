@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+// vitest の設定（test キー）にも型が付くよう、vitest/config の defineConfig を使う
+import { defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -14,5 +15,12 @@ export default defineConfig({
         changeOrigin: false,
       },
     },
+  },
+  test: {
+    // 画面のテストではブラウザの API（document など）が要るため jsdom を使う
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.ts',
+    css: true,
   },
 })
