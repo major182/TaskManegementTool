@@ -1,0 +1,64 @@
+/* 画面右下に積み上げて表示する（05 画面設計書 8.1） */
+.container {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 4px 12px rgba(9, 30, 66, 0.3);
+}
+
+.error {
+  background: var(--danger);
+}
+
+.info {
+  background: var(--text);
+}
+
+.message {
+  flex: 1;
+}
+
+.action {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+}
+
+.action:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.close {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.close:hover {
+  opacity: 1;
+}

@@ -1,0 +1,34 @@
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  color: var(--text);
+  background: var(--board-bg);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* 画面は PC のブラウザ幅（1024px 以上）前提（05 画面設計書 1章 方針4） */
+#root {
+  min-width: 1024px;
+  height: 100vh;
+}
