@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.3（ドラフト） |
+| ドキュメント版数 | 0.5（ドラフト） |
 | 作成日 | 2026-09-17 |
 | 最終更新日 | 2026-09-20 |
 | 作成者 | （氏名） |
@@ -47,7 +47,7 @@
 ### 2.2 フォルダ構成（1つの Git リポジトリで管理）
 ```
 TaskManegementTool/
-├── backend/          … Spring Boot（Maven）
+├── backend/          … Spring Boot（Gradle）
 ├── frontend/         … React（Vite）
 ├── prototype/        … 既存のプロトタイプ
 ├── compose.yaml      … 開発用 PostgreSQL
@@ -65,7 +65,7 @@ TaskManegementTool/
 |---|---|---|
 | 言語 | Java 21（LTS） | 長期サポート版。record やテキストブロックなど新しい書き方が使え、教材・情報も多い |
 | フレームワーク | Spring Boot（最新の安定版） | 課題の指定。[Spring Initializr](https://start.spring.io/) でひな形を作る |
-| ビルドツール | Maven | 設定ファイル（pom.xml）が読みやすく、日本語の情報が多い |
+| ビルドツール | Gradle（Kotlin DSL / `build.gradle.kts`） | Spring Initializr の既定であり、Spring Boot の現場で最も使われている。Kotlin DSL は IDE の補完と型チェックが効くため設定を書き間違えにくい。Gradle Wrapper（`gradlew`）が同梱され、PC に Gradle を入れなくてもビルドできる |
 | Web / API | Spring Web | REST API を作るための標準モジュール |
 | DB アクセス | Spring Data JPA（Hibernate） | インターフェースを書くだけで基本の CRUD ができ、学習コストが低い |
 | DB マイグレーション | Flyway | テーブル定義を SQL ファイルで履歴管理でき、開発環境と本番環境で同じ構造を再現できる |
@@ -112,7 +112,7 @@ TaskManegementTool/
 
 | 候補 | 選ばなかった理由 |
 |---|---|
-| Gradle | 高機能だが、設定がプログラムの形で書かれ、初学者には Maven より読みにくい |
+| Maven | 設定ファイル（`pom.xml`）は宣言的で読みやすく日本語の情報も多いが、Spring Initializr の既定・現場での利用率は Gradle が上回る。依存の記述も Gradle のほうが短い（v0.4 で Gradle に変更） |
 | MyBatis | SQL を直接書けて分かりやすいが、今回のテーブルは単純なため JPA で十分 |
 | H2（組み込み DB） | 手軽だが PostgreSQL と SQL の方言が違い、本番だけで起きるバグの原因になる |
 | Thymeleaf | サーバー側で画面を作る方式。フロントエンドを React で作る指定と合わない |
@@ -138,7 +138,7 @@ TaskManegementTool/
 |---|---|
 | 認証のしくみ | Spring Security（`spring-boot-starter-security`）のフォームログインではなく、**REST API でのログイン**（`POST /api/auth/login`）として実装する。画面は React が持つため |
 | パスワードの保存 | Spring Security の `BCryptPasswordEncoder` でハッシュ化して保存する。元に戻すことはできない |
-| ログイン状態の保持 | サーバー側のセッション（`JSESSIONID` Cookie、`HttpOnly` / `Secure` / `SameSite=None`、有効期限30日） |
+| ログイン状態の保持 | サーバー側のセッション（`JSESSIONID` Cookie、`HttpOnly` / `Secure` / `SameSite=None`、有効期限30日）。セッションの保存先は Spring Security の既定（サーバーのメモリ上）とし、Spring Session JDBC は使わない。そのためサーバーの再起動・スリープ時は再ログインが必要（[04 API設計書 1.1](04_api-design.md#11-セッションをメモリに持つことの制約要件への影響)） |
 | 認可（アクセス制限） | `/api/auth/**` 以外の API は、ログイン済みでなければ 401 を返す。さらに各処理で「ログイン中の利用者のデータか」を確認し、他人のデータなら 404 を返す |
 | CSRF 対策 | Cookie でセッションを持つため、Spring Security の CSRF トークンを有効にする（`CookieCsrfTokenRepository`） |
 | 対象外 | パスワード再設定、退会、メールアドレス登録、ログイン失敗回数によるロック |
@@ -167,6 +167,8 @@ TaskManegementTool/
 ## 改訂履歴
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.5 | 2026-09-20 | セッションの保存先を Spring Security の既定（メモリ）と明記（[04 API設計書](04_api-design.md) の決定を反映） | |
+| 0.4 | 2026-09-20 | ビルドツールを Maven から Gradle（Kotlin DSL）に変更。「選ばなかった技術」も入れ替え | |
 | 0.3 | 2026-09-20 | 利用者の見分け方を、ユーザーID＋パスワードのログイン（案C）に変更。Spring Security を採用し、セッション方式・BCrypt・CSRF 対策を記載 | |
 | 0.2 | 2026-09-20 | 利用者の見分け方を案B（ログインなし・ブラウザごとの利用者キー）に決定し、実現方法と要件定義書の更新内容を記載 | |
 | 0.1 | 2026-09-17 | 初版作成（課題の指定：Java / Spring Boot、React、PostgreSQL） | |
