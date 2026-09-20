@@ -57,6 +57,21 @@ public class TaskList {
         this.position = position;
     }
 
+    /** リスト名の変更（F-22）。 */
+    public void rename(String name) {
+        this.name = name;
+    }
+
+    /** 並び順の付け替え。詰め直し・並び替えのどちらでも使う。 */
+    public void moveTo(int position) {
+        this.position = position;
+    }
+
+    /** ゴミ箱へ移動（F-23）。中のカードの deleted_at は変えない。 */
+    public void moveToTrash(Instant deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
     @PreUpdate
     void onUpdate() {
         this.updatedAt = Instant.now();

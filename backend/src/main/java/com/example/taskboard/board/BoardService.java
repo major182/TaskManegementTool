@@ -60,7 +60,7 @@ public class BoardService {
      */
     @Transactional(readOnly = true)
     public BoardDetailResponse findDetail(Long userId, Long boardId) {
-        Board board = require(userId, boardId);
+        Board board = requireOwned(userId, boardId);
 
         List<TaskList> lists = taskListRepository.findByBoardIdAndDeletedAtIsNullOrderByPositionAsc(boardId);
         if (lists.isEmpty()) {
@@ -86,7 +86,7 @@ public class BoardService {
     /** ボード名の変更（F-13）。 */
     @Transactional
     public Board rename(Long userId, Long boardId, String name) {
-        Board board = require(userId, boardId);
+        Board board = requireOwned(userId, boardId);
         board.rename(name.trim());
         return board;
     }
@@ -98,7 +98,7 @@ public class BoardService {
      */
     @Transactional
     public void moveToTrash(Long userId, Long boardId) {
-        Board board = require(userId, boardId);
+        Board board = requireOwned(userId, boardId);
         board.moveToTrash(Instant.now());
 
         // 最後に開いたボードとして覚えていたら忘れる。
@@ -117,16 +117,17 @@ public class BoardService {
      */
     @Transactional
     public void updateLastOpenedBoard(Long userId, Long boardId) {
-        require(userId, boardId);
+        requireOwned(userId, boardId);
         requireUser(userId).setLastOpenedBoardId(boardId);
     }
 
     /**
      * 自分のもので、かつゴミ箱に入っていないボードを取り出す。
+     * リストやカードの Service からも「親のボードが自分のものか」の確認に使う。
      *
      * @throws NotFoundException 存在しない・他人のもの・ゴミ箱に入っているとき
      */
-    private Board require(Long userId, Long boardId) {
+    public Board requireOwned(Long userId, Long boardId) {
         return boardRepository.findByIdAndUserIdAndDeletedAtIsNull(boardId, userId)
                 .orElseThrow(() -> new NotFoundException("ボードが見つかりません"));
     }
