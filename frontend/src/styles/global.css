@@ -32,3 +32,15 @@ textarea {
   min-width: 1024px;
   height: 100vh;
 }
+
+/* 目には見えないが、読み上げソフトには読まれるテキスト */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
