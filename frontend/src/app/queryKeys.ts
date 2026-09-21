@@ -11,6 +11,12 @@ export const queryKeys = {
   board: (boardId: number) => ['board', boardId] as const,
   /** ゴミ箱の一覧（GET /api/trash） */
   trash: ['trash'] as const,
+  /**
+   * セッション切れで戻されたかどうか（業務ルール 5.6）。
+   * 通信では取らない画面だけの状態だが、401 はどのコンポーネントからでも起きるため、
+   * 受け渡しをせずに済むようキャッシュに置いている
+   */
+  sessionExpired: ['sessionExpired'] as const,
   /** サイドバーに出すゴミ箱の件数（GET /api/trash/count） */
   trashCount: ['trashCount'] as const,
 }

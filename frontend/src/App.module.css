@@ -1,0 +1,22 @@
+/* S-01 はまだ作っていないため、この PR では動作確認用の仮画面を出す */
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 100%;
+  color: #fff;
+}
+
+.logout {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.logout:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+}
