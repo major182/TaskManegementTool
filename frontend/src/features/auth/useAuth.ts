@@ -33,14 +33,30 @@ export function useCurrentUser() {
   })
 }
 
-/** ログイン・新規登録の成功後に、キャッシュを新しい利用者のものに入れ替える */
+/**
+ * ログイン状態そのものを表すキャッシュ。
+ * 利用者が入れ替わっても消してはいけない（消すと画面が誰も見ていない状態に戻る）。
+ */
+const KEPT_ON_USER_CHANGE = new Set<unknown>([
+  queryKeys.me[0],
+  queryKeys.sessionExpired[0],
+])
+
+/**
+ * 前の利用者のデータを捨てる。
+ *
+ * queryClient.clear() は使わない。あれは実行中の mutation の記録まで消してしまい、
+ * 新規登録の成功後に画面が切り替わらなくなるため（1回目の登録で画面が動かない不具合）。
+ * ログイン状態のキャッシュだけは残し、それ以外を消す。
+ */
 function useAuthSuccess() {
   const queryClient = useQueryClient()
   return (user: UserResponse) => {
-    // 前の利用者のボードなどが残らないよう、いったん全部捨ててから入れ直す
-    queryClient.clear()
     queryClient.setQueryData(queryKeys.me, user)
     queryClient.setQueryData(queryKeys.sessionExpired, false)
+    queryClient.removeQueries({
+      predicate: (query) => !KEPT_ON_USER_CHANGE.has(query.queryKey[0]),
+    })
   }
 }
 
@@ -67,10 +83,12 @@ export function useLogout() {
     // 通信が失敗しても画面上はログアウトさせる。
     // セッションが切れていて 401 になる場合もあり、そこで留まると画面が使えないため
     onSettled: () => {
-      queryClient.clear()
       queryClient.setQueryData(queryKeys.me, null)
       // 自分でログアウトしたので「期限が切れました」は出さない
       queryClient.setQueryData(queryKeys.sessionExpired, false)
+      queryClient.removeQueries({
+        predicate: (query) => !KEPT_ON_USER_CHANGE.has(query.queryKey[0]),
+      })
     },
   })
 }
