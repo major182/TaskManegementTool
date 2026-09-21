@@ -8,10 +8,18 @@
   background: var(--list-bg);
 }
 
+/* ドラッグ中の元の位置は薄く残す */
+.dragging {
+  opacity: 0.4;
+}
+
 .header {
   display: flex;
   align-items: center;
+  gap: 4px;
   padding: 10px 8px 6px 14px;
+  /* ヘッダーをつかんで並び替える（05 画面設計書 4.3 No.3） */
+  cursor: grab;
 }
 
 .name {
@@ -21,13 +29,49 @@
   font-weight: bold;
 }
 
+.iconButton {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-sub);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.iconButton:hover {
+  background: rgba(9, 30, 66, 0.1);
+  color: var(--text);
+}
+
 /* カードが増えたらリストごとに縦スクロールする。ヘッダーと「＋ カード」は残す */
 .cards {
   flex: 1;
-  min-height: 0;
+  min-height: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 0 8px;
   overflow-y: auto;
+}
+
+.footer {
+  padding: 8px;
+}
+
+.addCard {
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-sub);
+  text-align: left;
+}
+
+.addCard:hover {
+  background: rgba(9, 30, 66, 0.08);
+  color: var(--text);
 }
