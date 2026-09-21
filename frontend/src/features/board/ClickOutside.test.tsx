@@ -44,9 +44,7 @@ describe('編集中に画面の関係ないところを押したとき（業務�
   it('カードのその場編集が閉じる', async () => {
     render([{ method: 'PUT', path: '/cards/8', body: CARD_8 }])
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: '要件定義を書く を編集' }),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: '要件定義を書く を編集' }))
     expect(screen.getByLabelText('カードのタイトル')).toBeInTheDocument()
 
     await clickOutside()
@@ -60,9 +58,7 @@ describe('編集中に画面の関係ないところを押したとき（業務�
     render([{ method: 'PUT', path: '/lists/3', body: { id: 3, name: 'TODO' } }])
 
     const list = await screen.findByRole('region', { name: 'リスト TODO' })
-    await userEvent.click(
-      await within(list).findByRole('button', { name: 'TODO' }),
-    )
+    await userEvent.click(await within(list).findByRole('button', { name: 'TODO' }))
     expect(screen.getByLabelText('リスト名')).toBeInTheDocument()
 
     await clickOutside()

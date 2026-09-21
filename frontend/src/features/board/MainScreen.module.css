@@ -2,13 +2,3 @@
   display: flex;
   height: 100%;
 }
-
-/* ゴミ箱の表示エリアは次の工程で作る */
-.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  color: #fff;
-  font-size: 15px;
-}
