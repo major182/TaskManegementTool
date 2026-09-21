@@ -4,9 +4,10 @@
  *
  * ボード名・リスト名で共通に使う。カードは項目が複数あるため専用の編集部品を別に作る。
  */
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
 import styles from './InlineEdit.module.css'
 import { validateName } from './InlineEdit.ts'
+import { useClickOutside } from './useClickOutside.ts'
 
 type Props = {
   value: string
@@ -24,15 +25,9 @@ export function InlineEdit({ value, maxLength, onCommit, label, className }: Pro
   const [error, setError] = useState<string | undefined>(undefined)
   // Esc で閉じたあとに blur が走って再確定するのを防ぐための目印
   const cancelled = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  function startEditing() {
-    setDraft(value)
-    setError(undefined)
-    cancelled.current = false
-    setIsEditing(true)
-  }
-
-  function commit() {
+  const commit = useCallback(() => {
     if (cancelled.current) return
 
     const trimmed = draft.trim()
@@ -46,6 +41,16 @@ export function InlineEdit({ value, maxLength, onCommit, label, className }: Pro
     if (trimmed !== value) {
       onCommit(trimmed)
     }
+  }, [draft, maxLength, onCommit, value])
+
+  // 画面の関係ないところを押したときも確定して閉じる
+  useClickOutside(containerRef, commit, isEditing)
+
+  function startEditing() {
+    setDraft(value)
+    setError(undefined)
+    cancelled.current = false
+    setIsEditing(true)
   }
 
   function cancel() {
@@ -81,7 +86,7 @@ export function InlineEdit({ value, maxLength, onCommit, label, className }: Pro
   }
 
   return (
-    <div>
+    <div ref={containerRef}>
       <input
         className={`${styles.input} ${className ?? ''}`}
         type="text"

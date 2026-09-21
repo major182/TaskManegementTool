@@ -2,8 +2,9 @@
  * その場に現れる入力欄で1件追加する部品。
  * ボード・リスト・カードの作成で共通に使う（05 画面設計書 4.2・4.3）。
  */
-import { useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import styles from './InlineAddForm.module.css'
+import { useClickOutside } from './useClickOutside.ts'
 
 type Props = {
   label: string
@@ -33,6 +34,13 @@ export function InlineAddForm({
 }: Props) {
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | undefined>(undefined)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  // 画面の関係ないところを押したら入力欄を閉じる。
+  // 勝手に作ってしまわないよう、入力途中の文字は捨てる
+  // （作成するのは「追加」を押したときか Enter のときだけ）
+  const close = useCallback(() => onCancel(), [onCancel])
+  useClickOutside(formRef, close)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -58,7 +66,7 @@ export function InlineAddForm({
   }
 
   return (
-    <form className={styles.form} onSubmit={handleSubmit}>
+    <form ref={formRef} className={styles.form} onSubmit={handleSubmit}>
       <input
         className={styles.input}
         type="text"
