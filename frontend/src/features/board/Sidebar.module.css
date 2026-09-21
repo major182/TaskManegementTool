@@ -1,0 +1,116 @@
+/* prototype/style.css のサイドバーを踏襲（05 画面設計書 10章） */
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  overflow-y: auto;
+}
+
+.title {
+  margin: 0;
+  padding: 0 8px 16px;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.label {
+  padding: 0 8px 6px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.navItem {
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  text-align: left;
+  /* 長いボード名は幅で省略表示にする（05 画面設計書 4.2） */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.navItem:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.navItem.active {
+  background: var(--sidebar-active);
+  font-weight: bold;
+}
+
+.empty {
+  padding: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.6;
+}
+
+.add {
+  margin-top: 8px;
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  text-align: left;
+  opacity: 0.8;
+}
+
+.add:hover {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+.addForm {
+  margin-top: 8px;
+}
+
+.trash {
+  margin-top: 16px;
+  padding: 8px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.trash:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.trash.active {
+  border-radius: var(--radius-sm);
+  background: var(--sidebar-active);
+  font-weight: bold;
+}
+
+.logout {
+  margin-top: auto;
+  padding: 8px;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.logout:hover {
+  background: rgba(255, 255, 255, 0.1);
+}

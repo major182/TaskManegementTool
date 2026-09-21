@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App.tsx'
 import { renderWithProviders } from './test/renderWithProviders.tsx'
+import { mockApi } from './test/mockApi.ts'
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -28,15 +29,16 @@ describe('アプリ起動時の画面の出し分け（05 画面設計書 3章�
     })
   })
 
-  it('GET /api/auth/me が 200 ならログイン画面を出さない', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() => Promise.resolve(jsonResponse(200, LOGGED_IN_USER))),
-    )
+  it('GET /api/auth/me が 200 ならメイン画面（S-01）を出す', async () => {
+    mockApi([
+      { path: '/auth/me', body: LOGGED_IN_USER },
+      { path: '/boards', body: [] },
+      { path: '/trash/count', body: { count: 0 } },
+    ])
     renderWithProviders(<App />)
 
     await waitFor(() => {
-      expect(screen.getByText('taro_123 さんでログインしています')).toBeInTheDocument()
+      expect(screen.getByRole('navigation', { name: 'ボード' })).toBeInTheDocument()
     })
     expect(screen.queryByRole('button', { name: 'ログイン' })).toBeNull()
   })

@@ -1,0 +1,33 @@
+.list {
+  width: var(--list-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  border-radius: var(--radius-md);
+  background: var(--list-bg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: 10px 8px 6px 14px;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* カードが増えたらリストごとに縦スクロールする。ヘッダーと「＋ カード」は残す */
+.cards {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 8px;
+  overflow-y: auto;
+}

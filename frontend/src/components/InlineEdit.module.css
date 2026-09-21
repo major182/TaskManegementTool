@@ -1,0 +1,35 @@
+/* 表示状態。クリックすると入力欄に変わることが分かるよう、hover で薄く反応させる */
+.display {
+  display: block;
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.display:hover {
+  background: rgba(9, 30, 66, 0.08);
+}
+
+.input {
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.error {
+  margin: 2px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
