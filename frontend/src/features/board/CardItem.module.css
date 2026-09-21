@@ -6,11 +6,26 @@
   border-radius: var(--radius-sm);
   background: var(--card-bg);
   box-shadow: 0 1px 1px rgba(9, 30, 66, 0.25);
+  cursor: grab;
 }
 
+/* ドラッグ中の元の位置は薄く残し、どこから動かしたか分かるようにする */
+.dragging {
+  opacity: 0.4;
+}
+
+/* タイトル・説明文・期限日をまとめた、押すとその場編集になる部分 */
 .body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
 }
 
 .title {
@@ -28,9 +43,10 @@
   opacity: 0.6;
 }
 
-/* 説明文は1行に省略する（05 画面設計書 11章 No.1 の案を採用） */
+/* 説明文は1行に省略する（05 画面設計書 11章 No.1 の決定） */
 .description {
-  margin: 2px 0 0;
+  max-width: 100%;
+  margin-top: 2px;
   color: var(--text-sub);
   font-size: 12px;
   overflow: hidden;
@@ -39,7 +55,6 @@
 }
 
 .dueDate {
-  display: inline-block;
   margin-top: 4px;
   color: var(--text-sub);
   font-size: 12px;
@@ -49,4 +64,26 @@
 .overdue {
   color: var(--danger);
   font-weight: bold;
+}
+
+.delete {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-sub);
+  line-height: 1;
+  opacity: 0;
+}
+
+.card:hover .delete,
+.delete:focus-visible {
+  opacity: 1;
+}
+
+.delete:hover {
+  background: rgba(9, 30, 66, 0.1);
+  color: var(--danger);
 }

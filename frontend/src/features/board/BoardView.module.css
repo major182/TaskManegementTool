@@ -62,3 +62,37 @@
   color: #fff;
   font-size: 15px;
 }
+
+/* ＋リストを追加（一番右） */
+.addList {
+  width: var(--list-width);
+  flex-shrink: 0;
+}
+
+.addListButton {
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+  text-align: left;
+}
+
+.addListButton:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* ドラッグ中に指先へ重ねて出すカード */
+.dragOverlayCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: var(--list-width);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  box-shadow: 0 8px 16px rgba(9, 30, 66, 0.35);
+  transform: rotate(2deg);
+  cursor: grabbing;
+}

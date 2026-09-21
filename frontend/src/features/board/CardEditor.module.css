@@ -1,0 +1,95 @@
+.editor {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #c1c7d0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.description {
+  width: 100%;
+  min-height: 56px;
+  padding: 4px 6px;
+  border: 1px solid #c1c7d0;
+  border-radius: 4px;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.dueRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.dueInput {
+  padding: 3px 6px;
+  border: 1px solid #c1c7d0;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.clearDue {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-sub);
+  line-height: 1;
+}
+
+.clearDue:hover {
+  background: rgba(9, 30, 66, 0.1);
+  color: var(--text);
+}
+
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.save {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+}
+
+.cancel {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-sub);
+  font-size: 13px;
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
