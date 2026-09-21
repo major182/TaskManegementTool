@@ -37,10 +37,7 @@ export function useCurrentUser() {
  * ログイン状態そのものを表すキャッシュ。
  * 利用者が入れ替わっても消してはいけない（消すと画面が誰も見ていない状態に戻る）。
  */
-const KEPT_ON_USER_CHANGE = new Set<unknown>([
-  queryKeys.me[0],
-  queryKeys.sessionExpired[0],
-])
+const KEPT_ON_USER_CHANGE = new Set<unknown>([queryKeys.me[0], queryKeys.sessionExpired[0]])
 
 /**
  * 前の利用者のデータを捨てる。

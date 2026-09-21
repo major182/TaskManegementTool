@@ -10,6 +10,7 @@ import type { Card, UserResponse } from '../../api/types.ts'
 import { useLogout } from '../auth/useAuth.ts'
 import { BoardView, NoBoardView } from './BoardView.tsx'
 import { Sidebar } from './Sidebar.tsx'
+import { TrashView } from '../trash/TrashView.tsx'
 import styles from './MainScreen.module.css'
 import {
   useBoardDetail,
@@ -119,7 +120,7 @@ export function MainScreen({ user }: { user: UserResponse }) {
       />
 
       {isTrashActive ? (
-        <div className={styles.placeholder}>ゴミ箱の表示は次の工程で作ります</div>
+        <TrashView />
       ) : activeBoardId === null ? (
         <NoBoardView />
       ) : (

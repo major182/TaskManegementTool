@@ -44,22 +44,15 @@ describe('新規登録のあとの画面遷移（業務ルール 5.6）', () => 
     mockSignupFlow()
     renderWithProviders(<App />)
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: '新規登録はこちら' }),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: '新規登録はこちら' }))
     await userEvent.type(screen.getByLabelText('ユーザーID'), 'taro_123')
     await userEvent.type(screen.getByLabelText('パスワード'), 'pass1234')
-    await userEvent.type(
-      screen.getByLabelText('パスワード（確認用）'),
-      'pass1234',
-    )
+    await userEvent.type(screen.getByLabelText('パスワード（確認用）'), 'pass1234')
     await userEvent.click(screen.getByRole('button', { name: '登録する' }))
 
     // 確認画面を挟まず、そのままメイン画面が出る
     await waitFor(() => {
-      expect(
-        screen.getByRole('navigation', { name: 'ボード' }),
-      ).toBeInTheDocument()
+      expect(screen.getByRole('navigation', { name: 'ボード' })).toBeInTheDocument()
     })
     expect(screen.queryByRole('button', { name: '登録する' })).toBeNull()
   })
