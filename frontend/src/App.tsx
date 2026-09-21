@@ -5,17 +5,47 @@
  *     401 → S-02 ログイン画面
  *     200 → S-01 メイン画面
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FullScreenLoader } from './components/FullScreenLoader.tsx'
 import { LoginPage } from './features/auth/LoginPage.tsx'
 import { SignupPage } from './features/auth/SignupPage.tsx'
 import { useCurrentUser, useSessionExpired } from './features/auth/useAuth.ts'
 import { MainScreen } from './features/board/MainScreen.tsx'
 
+/** 履歴に残す目印。新規登録画面を開いているときだけ付ける */
+const SIGNUP_HISTORY_STATE = { screen: 'signup' }
+
+function isSignupInHistory(): boolean {
+  return (window.history.state as { screen?: string } | null)?.screen === 'signup'
+}
+
 export default function App() {
   const { data: user, isPending } = useCurrentUser()
   const sessionExpired = useSessionExpired()
   const [showSignup, setShowSignup] = useState(false)
+
+  /**
+   * ブラウザの「戻る」に対応する。
+   *
+   * 画面はルーターを使わず state だけで切り替えているため、そのままだと
+   * 新規登録画面で戻るを押したときにアプリの外へ出てしまい、画面が真っ白になる。
+   * 新規登録画面へ移るときに履歴を1つ積んでおき、戻るでログイン画面に返す。
+   */
+  useEffect(() => {
+    function handlePopState() {
+      setShowSignup(isSignupInHistory())
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  // ログイン・登録に成功したら、積んでおいた目印を消す。
+  // 残したままだと、メイン画面で戻るを押しても何も起きないように見えるため
+  useEffect(() => {
+    if (user && isSignupInHistory()) {
+      window.history.replaceState({}, '')
+    }
+  }, [user])
 
   // /api/auth/me の結果が出るまでは全画面ローダー。
   // ここでログイン画面を出すと、ログイン済みの人にも一瞬見えてしまう（05 画面設計書 9章）
@@ -28,8 +58,21 @@ export default function App() {
   }
 
   if (showSignup) {
-    return <SignupPage onSwitchToLogin={() => setShowSignup(false)} />
+    return (
+      <SignupPage
+        // 戻るボタンと同じ動きにして、履歴が二重に積み上がらないようにする
+        onSwitchToLogin={() => window.history.back()}
+      />
+    )
   }
 
-  return <LoginPage onSwitchToSignup={() => setShowSignup(true)} sessionExpired={sessionExpired} />
+  return (
+    <LoginPage
+      onSwitchToSignup={() => {
+        window.history.pushState(SIGNUP_HISTORY_STATE, '')
+        setShowSignup(true)
+      }}
+      sessionExpired={sessionExpired}
+    />
+  )
 }

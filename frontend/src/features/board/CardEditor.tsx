@@ -7,7 +7,8 @@
  *   Esc ／「取消」          → 変更を破棄
  *   期限日の「×」           → 期限日を空にする（dueDate: null で送る）
  */
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react'
+import { useClickOutside } from '../../components/useClickOutside.ts'
 import type { CardUpdateRequest } from '../../api/endpoints.ts'
 import type { Card } from '../../api/types.ts'
 import { LIMIT } from '../../messages.ts'
@@ -26,8 +27,9 @@ export function CardEditor({ card, onSave, onClose }: Props) {
   const [error, setError] = useState<string | undefined>(undefined)
   // Esc や「取消」で閉じたあと、blur で再び確定が走るのを防ぐ
   const closing = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  function commit() {
+  const commit = useCallback(() => {
     if (closing.current) return
 
     const message = validateDraft(draft)
@@ -41,7 +43,10 @@ export function CardEditor({ card, onSave, onClose }: Props) {
       onSave(toRequest(draft, card))
     }
     onClose()
-  }
+  }, [card, draft, onClose, onSave])
+
+  // 画面の関係ないところを押したときも確定して閉じる
+  useClickOutside(containerRef, commit)
 
   function cancel() {
     closing.current = true
@@ -72,7 +77,7 @@ export function CardEditor({ card, onSave, onClose }: Props) {
   return (
     // 入れ子の入力欄からの blur と Esc をまとめて受けるための div。
     // キー操作は中の入力欄が受け取るので、この div 自体は焦点を持たない
-    <div className={styles.editor} onBlur={handleBlur} onKeyDown={handleKeyDown}>
+    <div ref={containerRef} className={styles.editor} onBlur={handleBlur} onKeyDown={handleKeyDown}>
       <input type="checkbox" checked={card.isDone} aria-label={`${card.title} の完了`} readOnly />
       <div className={styles.body}>
         <input
