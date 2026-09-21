@@ -7,6 +7,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.taskboard.board.Board;
 import com.example.taskboard.board.BoardRepository;
 import com.example.taskboard.board.BoardService;
 import com.example.taskboard.common.BadRequestException;
@@ -109,7 +110,16 @@ public class TaskListService {
     @Transactional
     public TaskList restore(Long userId, Long listId) {
         TaskList list = taskListRepository.findTrashedById(listId, userId)
-                .orElseThrow(() -> trashedNotFoundOrUnrestorable(userId, listId));
+                .orElseThrow(() -> new NotFoundException("ゴミ箱にリストが見つかりません"));
+
+        // 元のボードがゴミ箱にあるときは戻さない（業務ルール 5.3）。
+        // ボードを先に戻せばリストも一緒に戻るため、ここで止めても行き止まりにはならない。
+        // findTrashedById では持ち主しか見ていないので、この確認はここで行う。
+        Board board = boardRepository.findById(list.getBoardId())
+                .orElseThrow(() -> new NotFoundException("ゴミ箱にリストが見つかりません"));
+        if (board.getDeletedAt() != null) {
+            throw new ConflictException("元のボードがないため戻せません");
+        }
 
         list.restore();
 
@@ -146,13 +156,6 @@ public class TaskListService {
      * 画面には理由を出したいが、他人のデータの存在は知らせたくないため、
      * 自分のボードのリストだと分かるときだけ 409 にする。
      */
-    private RuntimeException trashedNotFoundOrUnrestorable(Long userId, Long listId) {
-        return taskListRepository.findById(listId)
-                .filter(list -> list.getDeletedAt() != null)
-                .filter(list -> boardRepository.existsByIdAndUserId(list.getBoardId(), userId))
-                .<RuntimeException>map(list -> new ConflictException("元のボードがないため戻せません"))
-                .orElseGet(() -> new NotFoundException("ゴミ箱にリストが見つかりません"));
-    }
 
     /**
      * 自分のもので、かつゴミ箱に入っていないリストを取り出す。
