@@ -70,7 +70,7 @@ class TrashApiTest {
     }
 
     @Test
-    void 親がゴミ箱にある子は親の1件として表示する() throws Exception {
+    void 親と一緒にゴミ箱へ入った子は親の1件として表示する() throws Exception {
         MockHttpSession session = signup("parent");
         long boardId = createBoard(session, "学習計画");
         long listId = createList(session, boardId, "TODO");
@@ -78,19 +78,108 @@ class TrashApiTest {
 
         trash(session, "lists", listId);
 
-        // リスト1件だけが出る（中のカードは出ない）
+        // カードは自分で捨てていないので出ない。リスト1件だけ
         mockMvc.perform(get("/api/trash").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].type").value("LIST"));
+    }
 
+    @Test
+    void 自分で捨てた子は親も捨てたあとも表示し続けるが戻せない() throws Exception {
+        MockHttpSession session = signup("ownchild");
+        long boardId = createBoard(session, "学習計画");
+        long listId = createList(session, boardId, "TODO");
+        long cardId = createCard(session, listId, "自分で捨てるカード");
+
+        // カードを先に捨て、あとから親のリストも捨てる
+        trash(session, "cards", cardId);
+        trash(session, "lists", listId);
+
+        // カードが消えずに残っていること。戻すリストが無いので戻せない
+        mockMvc.perform(get("/api/trash").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].type").value("LIST"))
+                .andExpect(jsonPath("$[0].restorable").value(true))
+                .andExpect(jsonPath("$[1].type").value("CARD"))
+                .andExpect(jsonPath("$[1].restorable").value(false));
+
+        mockMvc.perform(get("/api/trash/count").session(session))
+                .andExpect(jsonPath("$.count").value(2));
+    }
+
+    @Test
+    void 自分で捨てたリストは親のボードを捨てても表示し続けるが戻せない() throws Exception {
+        MockHttpSession session = signup("ownlist");
+        long boardId = createBoard(session, "学習計画");
+        long listId = createList(session, boardId, "TODO");
+
+        trash(session, "lists", listId);
         trash(session, "boards", boardId);
 
-        // さらにボードを捨てると、ボード1件だけになる
+        mockMvc.perform(get("/api/trash").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].type").value("BOARD"))
+                .andExpect(jsonPath("$[0].restorable").value(true))
+                .andExpect(jsonPath("$[1].type").value("LIST"))
+                .andExpect(jsonPath("$[1].restorable").value(false));
+    }
+
+    @Test
+    void 親を戻すと子はまた戻せるようになる() throws Exception {
+        MockHttpSession session = signup("again");
+        long boardId = createBoard(session, "学習計画");
+        long listId = createList(session, boardId, "TODO");
+        long cardId = createCard(session, listId, "自分で捨てるカード");
+
+        trash(session, "cards", cardId);
+        trash(session, "lists", listId);
+        restore(session, "lists", listId).andExpect(status().isOk());
+
+        // カードはゴミ箱に残ったまま。元のリストが戻ったので戻せるようになる
         mockMvc.perform(get("/api/trash").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].type").value("BOARD"));
+                .andExpect(jsonPath("$[0].type").value("CARD"))
+                .andExpect(jsonPath("$[0].restorable").value(true));
+    }
+
+    @Test
+    void 親がゴミ箱にある子も完全に削除できる() throws Exception {
+        MockHttpSession session = signup("purgechild");
+        long boardId = createBoard(session, "学習計画");
+        long listId = createList(session, boardId, "TODO");
+        long cardId = createCard(session, listId, "自分で捨てるカード");
+
+        trash(session, "cards", cardId);
+        trash(session, "lists", listId);
+
+        mockMvc.perform(delete("/api/trash/cards/" + cardId).session(session).with(SecurityMockMvcRequestPostProcessors.csrf()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/trash").session(session))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].type").value("LIST"));
+    }
+
+    @Test
+    void ゴミ箱を空にすると親がゴミ箱にある子も消える() throws Exception {
+        MockHttpSession session = signup("emptyall");
+        long boardId = createBoard(session, "学習計画");
+        long listId = createList(session, boardId, "TODO");
+        long cardId = createCard(session, listId, "自分で捨てるカード");
+
+        trash(session, "cards", cardId);
+        trash(session, "lists", listId);
+        trash(session, "boards", boardId);
+
+        mockMvc.perform(delete("/api/trash").session(session).with(SecurityMockMvcRequestPostProcessors.csrf()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/trash/count").session(session))
+                .andExpect(jsonPath("$.count").value(0));
     }
 
     @Test

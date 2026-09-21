@@ -3,6 +3,7 @@ package com.example.taskboard.trash;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -51,7 +52,11 @@ public class TrashService {
 
     /**
      * ゴミ箱の一覧（F-41）。削除日時の新しい順（docs/01-3_business-rules.md 5.2）。
-     * 親がゴミ箱に入っている子は、各 Service の検索条件で除かれている（親の1件として表示するため）。
+     *
+     * <p>親と一緒にゴミ箱へ入った子は deletedAt が付かないので、そもそも出てこない
+     * （親の1件として表示する／業務ルール 5.3）。一方、利用者が自分で捨てた子は、
+     * あとから親も捨てられても出し続ける。消えたり現れたりすると何が捨てられているか
+     * 分からなくなるため。ただしその状態では戻せないので restorable を false にする。
      */
     @Transactional(readOnly = true)
     public List<TrashItemResponse> findAll(Long userId) {
@@ -63,23 +68,33 @@ public class TrashService {
         Map<Long, TaskList> listsById = parentLists(cards);
         Map<Long, Board> boardsById = parentBoards(lists, listsById.values());
 
+        // カードを戻すにはリストが要る。どのボードに戻せるリストがあるかを1回で調べる
+        Set<Long> boardsHavingLiveList = boardsWithLiveList(boardsById.keySet());
+
+        // ボードは親を持たないので、いつでも戻せる
         Stream<TrashItemResponse> boardItems = boards.stream()
                 .map(board -> new TrashItemResponse(
                         TrashType.BOARD, board.getId(), board.getName(),
                         null, board.getDeletedAt(), true));
 
+        // リストは元のボードが生きているときだけ戻せる（業務ルール 5.3）
         Stream<TrashItemResponse> listItems = lists.stream()
                 .map(list -> new TrashItemResponse(
                         TrashType.LIST, list.getId(), list.getName(),
-                        boardName(boardsById, list.getBoardId()), list.getDeletedAt(), true));
+                        boardName(boardsById, list.getBoardId()), list.getDeletedAt(),
+                        isBoardAlive(boardsById, list.getBoardId())));
 
+        // カードは元のボードが生きていて、戻せるリストが1つ以上あるときだけ戻せる
         Stream<TrashItemResponse> cardItems = cards.stream()
                 .map(card -> {
                     TaskList list = listsById.get(card.getListId());
-                    String location = boardName(boardsById, list.getBoardId()) + " ＞ " + list.getName();
+                    Long boardId = list.getBoardId();
+                    String location = boardName(boardsById, boardId) + " ＞ " + list.getName();
+                    boolean restorable = isBoardAlive(boardsById, boardId)
+                            && (list.getDeletedAt() == null || boardsHavingLiveList.contains(boardId));
                     return new TrashItemResponse(
                             TrashType.CARD, card.getId(), card.getTitle(),
-                            location, card.getDeletedAt(), true);
+                            location, card.getDeletedAt(), restorable);
                 });
 
         return Stream.of(boardItems, listItems, cardItems)
@@ -156,6 +171,20 @@ public class TrashService {
         List<Long> boardIds = Stream.concat(fromLists, fromCards).distinct().toList();
         return boardRepository.findAllById(boardIds).stream()
                 .collect(Collectors.toMap(Board::getId, Function.identity()));
+    }
+
+    /** 戻せるリストを1つ以上持つボードの ID */
+    private Set<Long> boardsWithLiveList(Set<Long> boardIds) {
+        if (boardIds.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(taskListRepository.findBoardIdsHavingLiveList(boardIds));
+    }
+
+    /** 元のボードが生きているか。ゴミ箱にある・見つからないときは false */
+    private boolean isBoardAlive(Map<Long, Board> boardsById, Long boardId) {
+        Board board = boardsById.get(boardId);
+        return board != null && board.getDeletedAt() == null;
     }
 
     private String boardName(Map<Long, Board> boardsById, Long boardId) {
