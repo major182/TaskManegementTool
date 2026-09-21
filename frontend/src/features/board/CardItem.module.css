@@ -1,0 +1,52 @@
+.card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  box-shadow: 0 1px 1px rgba(9, 30, 66, 0.25);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* 完了したカードはタイトルに取り消し線（05 画面設計書 4.4） */
+.done .title {
+  text-decoration: line-through;
+}
+
+.done {
+  opacity: 0.6;
+}
+
+/* 説明文は1行に省略する（05 画面設計書 11章 No.1 の案を採用） */
+.description {
+  margin: 2px 0 0;
+  color: var(--text-sub);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dueDate {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--text-sub);
+  font-size: 12px;
+}
+
+/* 未完了かつ期限日が今日より前のときだけ目立たせる */
+.overdue {
+  color: var(--danger);
+  font-weight: bold;
+}
