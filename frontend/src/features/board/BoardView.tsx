@@ -183,8 +183,15 @@ export function BoardView({
           </div>
         </div>
 
-        {/* ドラッグ中のカードを指先に重ねて出す（dnd-kit の標準的な見せ方） */}
-        <DragOverlay>
+        {/*
+          ドラッグ中のカードを指先に重ねて出す（dnd-kit の標準的な見せ方）。
+
+          dropAnimation を切っているのは、離したあとに重ねていたカードが
+          「元あった場所」へ animation で戻って見えるため。こちらは離した瞬間に
+          カードを移動先へ描き替えている（楽観的更新）ので、実際の位置と
+          animation の向きが食い違い、逆走しているように見えてしまう。
+        */}
+        <DragOverlay dropAnimation={null}>
           {draggingCard && (
             <div className={styles.dragOverlayCard}>
               <CardContent
