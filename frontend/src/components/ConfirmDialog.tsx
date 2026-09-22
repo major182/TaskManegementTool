@@ -38,6 +38,8 @@ export function ConfirmDialog({ message, onConfirm, onCancel }: Props) {
   }
 
   return (
+    // 背景を押したらキャンセル。キーボードでは Esc（onCancel）で同じことができる
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <dialog
       ref={dialogRef}
       className={styles.dialog}

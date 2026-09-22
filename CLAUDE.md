@@ -21,7 +21,8 @@
 2. **`main` を最新にする** — `git switch main && git pull`
 3. **ブランチを切る** — 命名規則は 1.3
 4. **実装する** — こまめにコミット（コミット規約は 1.5）
-5. **テストを通す** — `backend/` を触ったら `./gradlew test`、`frontend/` を触ったら `npm run build`
+5. **チェックを通す** — `backend/` を触ったら `./gradlew check`（整形・Checkstyle・テスト）、`frontend/` を触ったら `npm run check && npm run build`（型・lint・整形・テスト・ビルド）。
+   整形のずれは `./gradlew spotlessApply`・`npm run format` で自動で直せる。同じチェックが PR ごとに GitHub Actions（CI）でも動く
 6. **プッシュして PR を作る** — 本文に `Closes #<Issue番号>` を必ず書く
 7. **マージ後** — `main` を pull し、作業ブランチを削除する
 

@@ -1,5 +1,8 @@
 plugins {
 	java
+	checkstyle
+	// 書式のずれ（未使用の import・行末の空白・タブ混在など）を検出・自動修正する
+	id("com.diffplug.spotless") version "8.10.2"
 	id("org.springframework.boot") version "4.1.1"
 	id("io.spring.dependency-management") version "1.1.7"
 }
@@ -41,4 +44,21 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+}
+
+// ./gradlew check で test と一緒に動く静的チェック（docs/02_tech-stack.md 3.1）
+spotless {
+	java {
+		target("src/**/*.java")
+		removeUnusedImports()
+		leadingTabsToSpaces(4)
+		trimTrailingWhitespace()
+		endWithNewline()
+	}
+}
+
+checkstyle {
+	toolVersion = "14.1.0"
+	configFile = file("config/checkstyle/checkstyle.xml")
+	maxWarnings = 0
 }
