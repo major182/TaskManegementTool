@@ -27,7 +27,7 @@ public final class AuthDtos {
             String password) {
     }
 
-    /** POST /api/auth/login のリクエスト。ここでは形式チェックをしない（失敗はすべて 401）。 */
+    /** POST /api/auth/login のリクエスト。空だけは 400 にし、形式はチェックしない（それ以外の失敗はすべて 401）。 */
     public record LoginRequest(
             @NotBlank(message = "ユーザーIDを入力してください") String username,
             @NotBlank(message = "パスワードを入力してください") String password) {
