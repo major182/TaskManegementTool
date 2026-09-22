@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.7（ドラフト） |
+| ドキュメント版数 | 0.8（ドラフト） |
 | 作成日 | 2026-09-17 |
-| 最終更新日 | 2026-09-20 |
+| 最終更新日 | 2026-09-22 |
 | 作成者 | （氏名） |
 | ステータス | レビュー待ち |
 
@@ -75,6 +75,7 @@ TaskManegementTool/
 | API ドキュメント | springdoc-openapi（Swagger UI） | API を画面から確認・試せるので、フロントエンドとのつなぎ込みが楽になる |
 | テスト | JUnit 5 / Mockito / Spring Boot Test | Spring Boot に標準で含まれる |
 | DB を使うテスト | Testcontainers（PostgreSQL） | 本番と同じ PostgreSQL でテストでき、H2 との差によるバグを防げる |
+| 整形・静的チェック | Spotless ＋ Checkstyle | Spotless は未使用の import・行末の空白・タブ混在などを検出し、`./gradlew spotlessApply` で自動で直せる。Checkstyle は命名規則や、`switch` の書き漏れなどバグにつながりやすい書き方を検出する。どちらも `./gradlew check` でテストと一緒に動く（v0.8 で追加） |
 | ボイラープレート削減 | 使わない（Lombok なし） | DTO は Java の record で十分。学習用として、Java 本来の書き方を優先する |
 
 ### 3.2 フロントエンド
@@ -88,7 +89,7 @@ TaskManegementTool/
 | ドラッグ＆ドロップ | dnd-kit | React 向けで現在も保守されている。カードのリスト間移動とリスト並び替えの両方に対応（react-beautiful-dnd は保守終了） |
 | スタイル | CSS Modules | プロトタイプの CSS をほぼそのまま使え、クラス名の衝突も防げる |
 | テスト | Vitest ＋ React Testing Library | Vite と設定を共有でき、Jest と同じ書き方ができる |
-| コード整形・チェック | oxlint ＋ Prettier | Vite の React + TypeScript テンプレートの既定が ESLint から oxlint に変わったため、そのまま採用した。設定なしで動き、ESLint より大幅に速い（v0.7 で ESLint から変更） |
+| コード整形・チェック | oxlint ＋ Prettier | Vite の React + TypeScript テンプレートの既定が ESLint から oxlint に変わったため、そのまま採用した。設定なしで動き、ESLint より大幅に速い（v0.7 で ESLint から変更）。既定のルールに加え、React フックの依存配列の漏れ（exhaustive-deps）・アクセシビリティ（jsx-a11y）・import・テスト（vitest）のルールを有効にしている（v0.8）。`npm run check` で型・lint・整形・テストをまとめて確認する |
 
 ### 3.3 データベース
 | 役割 | 技術 | 選んだ理由 |
@@ -102,7 +103,7 @@ TaskManegementTool/
 |---|---|---|
 | エディタ | IntelliJ IDEA Community Edition（Java）／VS Code（React） | Java は IntelliJ の補完・デバッグが強い。VS Code 1本にまとめる場合は Extension Pack for Java を入れる |
 | ソース管理 | Git / GitHub | 現場では必ず使う |
-| CI | GitHub Actions | push のたびにビルドとテストを自動で動かせる。GitHub と同じ場所で完結する |
+| CI | GitHub Actions | push のたびにビルドとテストを自動で動かせる。GitHub と同じ場所で完結する。設定は `.github/workflows/ci.yml`（v0.8 で作成）。PR ごとにフロントエンドの `npm run check`・`npm run build` と、バックエンドの `./gradlew check` を実行する |
 | 公開先（フロントエンド） | Vercel | 無料で静的サイトを HTTPS 公開でき、GitHub と連携して自動デプロイできる |
 | 公開先（バックエンド） | Render（Docker で公開） | Java（Spring Boot）を無料プランで動かせる。※しばらくアクセスがないと停止し、次のアクセスで起動に数十秒かかる |
 | 公開先（データベース） | Neon | PostgreSQL を無料で使え、Render の無料 DB のような利用期限がない |
@@ -188,6 +189,7 @@ TaskManegementTool/
 ## 改訂履歴
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.8 | 2026-09-22 | 静的チェックを導入。バックエンドに Spotless・Checkstyle を追加し、oxlint のルールを強化。CI（GitHub Actions）を作成 | |
 | 0.7 | 2026-09-20 | 実装開始にあたり、3.5「実装時に確定したバージョン」を追加。コード整形・チェックを ESLint から oxlint に変更（Vite テンプレートの既定に合わせた） | |
 | 0.6 | 2026-09-20 | 2.2 フォルダ構成に README.md と docs/ フォルダを反映（ドキュメントを docs/ に移動） | |
 | 0.5 | 2026-09-20 | セッションの保存先を Spring Security の既定（メモリ）と明記（[04 API設計書](04_api-design.md) の決定を反映） | |

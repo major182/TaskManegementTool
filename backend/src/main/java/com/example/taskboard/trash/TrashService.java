@@ -140,6 +140,8 @@ public class TrashService {
             case BOARD -> boardService.deletePermanently(userId, id);
             case LIST -> taskListService.deletePermanently(userId, id);
             case CARD -> cardService.deletePermanently(userId, id);
+            // switch 文は switch 式と違い、種類を増やしたときの書き漏れをコンパイラが教えてくれないため
+            default -> throw new IllegalArgumentException("未対応の種類です: " + type);
         }
     }
 
