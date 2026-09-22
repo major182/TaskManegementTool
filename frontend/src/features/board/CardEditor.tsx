@@ -77,6 +77,7 @@ export function CardEditor({ card, onSave, onClose }: Props) {
   return (
     // 入れ子の入力欄からの blur と Esc をまとめて受けるための div。
     // キー操作は中の入力欄が受け取るので、この div 自体は焦点を持たない
+    // oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- 子の入力欄のイベントをまとめて受けるだけのため
     <div ref={containerRef} className={styles.editor} onBlur={handleBlur} onKeyDown={handleKeyDown}>
       <input type="checkbox" checked={card.isDone} aria-label={`${card.title} の完了`} readOnly />
       <div className={styles.body}>
