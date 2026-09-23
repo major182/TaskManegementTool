@@ -1,12 +1,13 @@
 package com.example.taskboard.board;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.taskboard.auth.CurrentUser;
+import com.example.taskboard.auth.AppUserDetails;
 import com.example.taskboard.board.BoardDtos.LastOpenedBoardRequest;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,11 +24,9 @@ import jakarta.validation.Valid;
 public class LastOpenedBoardController {
 
     private final BoardService boardService;
-    private final CurrentUser currentUser;
 
-    public LastOpenedBoardController(BoardService boardService, CurrentUser currentUser) {
+    public LastOpenedBoardController(BoardService boardService) {
         this.boardService = boardService;
-        this.currentUser = currentUser;
     }
 
     /**
@@ -36,8 +35,9 @@ public class LastOpenedBoardController {
      */
     @PutMapping("/last-opened-board")
     @Operation(summary = "最後に開いたボードの記録", description = "記録するだけなので本文は返さない")
-    public ResponseEntity<Void> update(@Valid @RequestBody LastOpenedBoardRequest request) {
-        boardService.updateLastOpenedBoard(currentUser.requireId(), request.boardId());
+    public ResponseEntity<Void> update(@AuthenticationPrincipal AppUserDetails user,
+                                           @Valid @RequestBody LastOpenedBoardRequest request) {
+        boardService.updateLastOpenedBoard(user.getId(), request.boardId());
         return ResponseEntity.noContent().build();
     }
 }

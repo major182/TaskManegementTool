@@ -13,6 +13,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.example.taskboard.common.ConflictException;
@@ -33,14 +35,28 @@ class AuthServiceTest {
     void 登録するとパスワードはハッシュ化されて保存される() {
         when(userRepository.existsByUsername("taro_123")).thenReturn(false);
         when(passwordEncoder.encode("pass1234")).thenReturn("$2a$10$hashed");
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         authService.signup("taro_123", "pass1234");
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(saved.capture());
+        verify(userRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getUsername()).isEqualTo("taro_123");
         assertThat(saved.getValue().getPasswordHash()).isEqualTo("$2a$10$hashed");
+    }
+
+    @Test
+    void 確認のあとに横取りされたときも409になる() {
+        // 確認と保存の間に同じユーザーID が登録されると、DB の一意制約で止まる。
+        // これを 500 のままにせず 409 に変換していることを確かめる
+        when(userRepository.existsByUsername("taro_123")).thenReturn(false);
+        when(passwordEncoder.encode("pass1234")).thenReturn("$2a$10$hashed");
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException("uq_users_username"));
+
+        assertThatThrownBy(() -> authService.signup("taro_123", "pass1234"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessage("このユーザーID は使われています");
     }
 
     @Test

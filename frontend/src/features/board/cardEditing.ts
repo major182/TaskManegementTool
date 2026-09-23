@@ -37,10 +37,23 @@ export function toRequest(draft: CardDraft, card: Card): CardUpdateRequest {
   }
 }
 
+/**
+ * カードのタイトルの入力チェック（業務ルール 5.1、05 画面設計書 8.2）。
+ * 追加のときも編集のときも同じ規則にするため、ここに置いて両方から使う
+ *
+ * @returns エラーメッセージ。問題なければ undefined
+ */
+export function validateCardTitle(title: string): string | undefined {
+  if (title.trim() === '') return FIELD_ERROR.cardTitleRequired
+  if (title.length > LIMIT.cardTitle) return FIELD_ERROR.cardTitleTooLong
+  return undefined
+}
+
 /** @returns エラーメッセージ。問題なければ undefined */
 export function validateDraft(draft: CardDraft): string | undefined {
-  if (draft.title.trim() === '') return FIELD_ERROR.cardTitleRequired
-  if (draft.title.length > LIMIT.cardTitle) return FIELD_ERROR.cardTitleTooLong
+  const titleError = validateCardTitle(draft.title)
+  if (titleError) return titleError
+
   if (draft.description.length > LIMIT.cardDescription) {
     return FIELD_ERROR.descriptionTooLong
   }

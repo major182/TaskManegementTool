@@ -92,4 +92,25 @@ describe('S-03 新規登録画面', () => {
     renderSignupPage()
     expect(screen.getByText(/パスワードを忘れるとデータを開けなくなります/)).toBeInTheDocument()
   })
+
+  it('サーバーの入力チェック（400）は、該当の入力欄の下に出す（05 画面設計書 6章）', async () => {
+    mockFetch(
+      jsonResponse(400, {
+        detail: '入力内容を確認してください',
+        errors: [{ field: 'password', message: 'パスワードは8〜72文字で入力してください' }],
+      }),
+    )
+    renderSignupPage()
+
+    await userEvent.type(screen.getByLabelText('ユーザーID'), 'taro_123')
+    await userEvent.type(screen.getByLabelText('パスワード'), 'pass1234')
+    await userEvent.type(screen.getByLabelText('パスワード（確認用）'), 'pass1234')
+    await userEvent.click(screen.getByRole('button', { name: '登録する' }))
+
+    // 項目ごとのメッセージが出て、まとめた「保存できませんでした」は出ない
+    expect(await screen.findByText('パスワードは8〜72文字で入力してください')).toBeInTheDocument()
+    expect(
+      screen.queryByText('保存できませんでした。通信の状態を確認して、もう一度お試しください'),
+    ).not.toBeInTheDocument()
+  })
 })

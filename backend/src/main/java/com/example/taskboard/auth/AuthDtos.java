@@ -22,7 +22,9 @@ public final class AuthDtos {
 
             @NotBlank(message = "パスワードを入力してください")
             @Size(min = 8, max = 72, message = "パスワードは8〜72文字で入力してください")
-            @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).+$",
+            // 使える文字は半角英数字と記号（空白を含まない印字可能な ASCII）に限る。
+            // 「.」のままだと全角文字や空白も通ってしまい、業務ルール 5.1 と食い違う
+            @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d)[\\x21-\\x7E]+$",
                     message = "パスワードは英字と数字をそれぞれ1文字以上含めてください")
             String password) {
     }

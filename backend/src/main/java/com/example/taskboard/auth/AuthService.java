@@ -1,5 +1,6 @@
 package com.example.taskboard.auth;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +33,14 @@ public class AuthService {
             throw new ConflictException("このユーザーID は使われています");
         }
         User user = new User(username, passwordEncoder.encode(rawPassword));
-        return userRepository.save(user);
+        try {
+            // 確認と保存の間に、同じユーザーID の登録が入り込むことがある。
+            // そのときは DB の一意制約（uq_users_username）で止まるので、
+            // 上の確認と同じ 409 に変換する。変換しないと 500 になってしまう
+            return userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new ConflictException("このユーザーID は使われています");
+        }
     }
 
     @Transactional(readOnly = true)

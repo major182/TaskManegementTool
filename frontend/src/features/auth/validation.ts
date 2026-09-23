@@ -9,8 +9,11 @@ import { FIELD_ERROR } from '../../messages.ts'
 
 /** 半角英数字とアンダースコアで4〜20文字（サーバーの @Pattern と同じ） */
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{4,20}$/
-/** 8〜72文字で、英字と数字をそれぞれ1文字以上 */
-const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d).{8,72}$/
+/**
+ * 8〜72文字で、英字と数字をそれぞれ1文字以上。
+ * 使える文字は半角英数字と記号（空白を含まない印字可能な ASCII）だけ（業務ルール 5.1）。
+ */
+const PASSWORD_PATTERN = /^(?=.*[A-Za-z])(?=.*\d)[\x21-\x7E]{8,72}$/
 
 /** @returns エラーメッセージ。問題なければ undefined */
 export function validateUsername(value: string): string | undefined {

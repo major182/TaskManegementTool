@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import styles from './Toast.module.css'
 import { ToastContext, type ShowToast, type ToastAction, type ToastKind } from './toastContext.ts'
 
@@ -19,6 +19,14 @@ const INFO_DURATION_MS = 5000
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const nextId = useRef(1)
+  // 自動で消すためのタイマー。画面から外れるときに残っていると、
+  // 無くなった相手に setState してしまうので、まとめて解除できるよう覚えておく
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  useEffect(() => {
+    const running = timers.current
+    return () => running.forEach(clearTimeout)
+  }, [])
 
   const dismiss = useCallback((id: number) => {
     setToasts((current) => current.filter((t) => t.id !== id))
@@ -29,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = nextId.current++
       setToasts((current) => [...current, { id, kind, message, action }])
       if (kind === 'info') {
-        setTimeout(() => dismiss(id), INFO_DURATION_MS)
+        timers.current.push(setTimeout(() => dismiss(id), INFO_DURATION_MS))
       }
     },
     [dismiss],

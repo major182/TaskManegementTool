@@ -3,8 +3,7 @@
  * サイドバーと表示エリアを組み立て、どのボードを出すかを決める。
  */
 import { useEffect, useState } from 'react'
-import { useToast } from '../../components/toastContext.ts'
-import { describeError } from '../../app/errorHandling.ts'
+import { useApiErrorNotifier } from '../../app/useApiErrorNotifier.ts'
 import type { CardUpdateRequest } from '../../api/endpoints.ts'
 import type { Card, UserResponse } from '../../api/types.ts'
 import { useLogout } from '../auth/useAuth.ts'
@@ -33,7 +32,7 @@ import {
 } from './useListCardMutations.ts'
 
 export function MainScreen({ user }: { user: UserResponse }) {
-  const showToast = useToast()
+  const notifyError = useApiErrorNotifier()
   const boardListQuery = useBoardList()
   const trashCountQuery = useTrashCount()
 
@@ -62,18 +61,12 @@ export function MainScreen({ user }: { user: UserResponse }) {
   const listCard = useListCardActions(activeBoardId ?? 0)
 
   // 読み込みに失敗したことは、通信の結果なのでトーストで知らせる（05 画面設計書 8.1）
+  // 読み込みに失敗したことを知らせる。401 ならログイン画面（S-02）へ戻す（05 画面設計書 3章）
   const loadError = boardListQuery.error ?? boardQuery.error
   useEffect(() => {
     if (!loadError) return
-    const handling = describeError(loadError, 'load')
-    showToast({
-      kind: handling.kind,
-      message: handling.message,
-      action: handling.actionLabel
-        ? { label: handling.actionLabel, onClick: () => location.reload() }
-        : undefined,
-    })
-  }, [loadError, showToast])
+    notifyError(loadError, { operation: 'load' })
+  }, [loadError, notifyError])
 
   function selectBoard(boardId: number) {
     setIsTrashActive(false)

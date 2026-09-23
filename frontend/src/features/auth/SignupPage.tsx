@@ -54,9 +54,21 @@ export function SignupPage({ onSwitchToLogin }: Props) {
       ? FIELD_ERROR.usernameTaken
       : undefined
 
-  const formError = signup.isError && !duplicateUsername ? TOAST.saveFailed : undefined
+  // サーバーの入力チェック（400）は、項目ごとに該当の欄の下へ出す（05 画面設計書 6章）。
+  // まとめて1つの文言にすると、どの欄を直せばよいか分からなくなる
+  const serverFieldError = (field: string) =>
+    signup.error instanceof ApiError && signup.error.status === 400
+      ? signup.error.fieldMessage(field)
+      : undefined
 
-  const usernameError = errors.username ?? duplicateUsername
+  const hasServerFieldError =
+    serverFieldError('username') !== undefined || serverFieldError('password') !== undefined
+
+  const formError =
+    signup.isError && !duplicateUsername && !hasServerFieldError ? TOAST.saveFailed : undefined
+
+  const usernameError = errors.username ?? duplicateUsername ?? serverFieldError('username')
+  const passwordError = errors.password ?? serverFieldError('password')
 
   return (
     <div className={styles.screen}>
@@ -101,7 +113,7 @@ export function SignupPage({ onSwitchToLogin }: Props) {
           </label>
           <input
             id={passwordId}
-            className={`${styles.input} ${errors.password ? styles.invalid : ''}`}
+            className={`${styles.input} ${passwordError ? styles.invalid : ''}`}
             type="password"
             value={password}
             autoComplete="new-password"
@@ -114,7 +126,7 @@ export function SignupPage({ onSwitchToLogin }: Props) {
             }
           />
           <p className={styles.hint}>英字と数字を含む8文字以上</p>
-          {errors.password && <p className={styles.fieldError}>{errors.password}</p>}
+          {passwordError && <p className={styles.fieldError}>{passwordError}</p>}
         </div>
 
         <div className={styles.field}>

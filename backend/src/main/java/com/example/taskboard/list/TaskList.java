@@ -2,15 +2,14 @@ package com.example.taskboard.list;
 
 import java.time.Instant;
 
-import org.hibernate.annotations.Generated;
-import org.hibernate.generator.EventType;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 /**
@@ -35,13 +34,13 @@ public class TaskList {
     @Column(nullable = false)
     private int position;
 
-    // DDL の DEFAULT now() が入れた値を、保存した直後に読み戻す
-    @Generated(event = EventType.INSERT)
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    // 作成日時は Hibernate が保存時に入れる（DDL の DEFAULT now() は、SQL を直接実行したときの保険）
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @Generated(event = EventType.INSERT)
-    @Column(name = "updated_at", nullable = false, insertable = false)
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "deleted_at")
@@ -77,10 +76,6 @@ public class TaskList {
         this.deletedAt = null;
     }
 
-    @PreUpdate
-    void onUpdate() {
-        this.updatedAt = Instant.now();
-    }
 
     public Long getId() {
         return id;
