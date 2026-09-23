@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react'
 import { FullScreenLoader } from './components/FullScreenLoader.tsx'
+import { LoadFailedScreen } from './components/LoadFailedScreen.tsx'
 import { LoginPage } from './features/auth/LoginPage.tsx'
 import { SignupPage } from './features/auth/SignupPage.tsx'
 import { useCurrentUser, useSessionExpired } from './features/auth/useAuth.ts'
@@ -20,7 +21,7 @@ function isSignupInHistory(): boolean {
 }
 
 export default function App() {
-  const { data: user, isPending } = useCurrentUser()
+  const { data: user, isPending, isError, refetch } = useCurrentUser()
   const sessionExpired = useSessionExpired()
   const [showSignup, setShowSignup] = useState(false)
 
@@ -55,6 +56,13 @@ export default function App() {
 
   if (user) {
     return <MainScreen user={user} />
+  }
+
+  // 未ログイン（401）は user が null になる。ここに来るのは
+  // サーバーが落ちている・通信できないなど別の理由なので、
+  // ログイン画面を出さずに読み込み失敗として伝える（05 画面設計書 9章）
+  if (isError) {
+    return <LoadFailedScreen onRetry={() => void refetch()} />
   }
 
   if (showSignup) {

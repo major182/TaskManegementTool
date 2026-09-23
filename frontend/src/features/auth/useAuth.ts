@@ -3,6 +3,7 @@
  * 出典：05 画面設計書 3章（画面遷移）、04 API設計書 4.1〜4.3。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { ApiError } from '../../api/client.ts'
 import { authApi } from '../../api/endpoints.ts'
 import type { CredentialsRequest, UserResponse } from '../../api/types.ts'
@@ -96,10 +97,12 @@ export function useLogout() {
  */
 export function useSessionExpiredHandler() {
   const queryClient = useQueryClient()
-  return () => {
+  // 読み込みエラーの通知（useApiErrorNotifier）から useEffect 経由で使うため、
+  // 毎回別の関数を返さないようにする
+  return useCallback(() => {
     queryClient.setQueryData(queryKeys.me, null)
     queryClient.setQueryData(queryKeys.sessionExpired, true)
-  }
+  }, [queryClient])
 }
 
 /** ログイン画面に「有効期限が切れました」を出すかどうか */

@@ -9,7 +9,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { InlineAddForm } from '../../components/InlineAddForm.tsx'
 import { InlineEdit } from '../../components/InlineEdit.tsx'
 import type { Card, TaskList } from '../../api/types.ts'
-import { FIELD_ERROR, LIMIT } from '../../messages.ts'
+import { LIMIT } from '../../messages.ts'
+import { validateCardTitle } from './cardEditing.ts'
 import { CardEditor } from './CardEditor.tsx'
 import { CardItem } from './CardItem.tsx'
 import type { CardUpdateRequest } from '../../api/endpoints.ts'
@@ -112,7 +113,7 @@ export function ListColumn({
             placeholder="カードのタイトルを入力"
             submitLabel="追加"
             maxLength={LIMIT.cardTitle}
-            validate={(value) => (value.trim() === '' ? FIELD_ERROR.cardTitleRequired : undefined)}
+            validate={validateCardTitle}
             onSubmit={onCreateCard}
             onCancel={() => setIsAddingCard(false)}
             // 続けて追加できるよう入力欄は開いたままにする（05 画面設計書 4.3 No.7）

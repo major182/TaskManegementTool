@@ -10,11 +10,10 @@
  * 各操作でこれを書くと必ずどこかで書き漏らすため、1つのフックに寄せている。
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { describeError } from '../../app/errorHandling.ts'
+import { useEffect, useRef } from 'react'
 import { queryKeys } from '../../app/queryKeys.ts'
-import { useToast } from '../../components/toastContext.ts'
+import { useApiErrorNotifier } from '../../app/useApiErrorNotifier.ts'
 import type { BoardDetail } from '../../api/types.ts'
-import { useSessionExpiredHandler } from '../auth/useAuth.ts'
 
 type Options<TVariables, TData> = {
   boardId: number
@@ -33,11 +32,14 @@ export function useOptimisticBoardMutation<TVariables, TData>({
   invalidateKeys = [],
 }: Options<TVariables, TData>) {
   const queryClient = useQueryClient()
-  const showToast = useToast()
-  const onSessionExpired = useSessionExpiredHandler()
+  const notifyError = useApiErrorNotifier()
   const boardKey = queryKeys.board(boardId)
 
-  return useMutation<TData, unknown, TVariables, { previous?: BoardDetail }>({
+  // [再試行] で同じ操作をやり直せるよう、自分自身の mutate を覚えておく。
+  // onError を作る時点では mutation がまだ無いので、箱（ref）を経由する
+  const retry = useRef<(variables: TVariables) => void>(() => {})
+
+  const mutation = useMutation<TData, unknown, TVariables, { previous?: BoardDetail }>({
     mutationFn,
 
     onMutate: async (variables) => {
@@ -50,24 +52,13 @@ export function useOptimisticBoardMutation<TVariables, TData>({
       return { previous }
     },
 
-    onError: (error, _variables, context) => {
+    onError: (error, variables, context) => {
       // 先に更新していた画面を元の状態へ戻す（05 画面設計書 8.1）
       if (context?.previous) {
         queryClient.setQueryData(boardKey, context.previous)
       }
 
-      const handling = describeError(error, 'save')
-      if (handling.sessionExpired) {
-        onSessionExpired()
-        return
-      }
-      showToast({
-        kind: handling.kind,
-        message: handling.message,
-        action: handling.actionLabel
-          ? { label: handling.actionLabel, onClick: () => location.reload() }
-          : undefined,
-      })
+      notifyError(error, { operation: 'save', onRetry: () => retry.current(variables) })
     },
 
     onSettled: () => {
@@ -79,4 +70,10 @@ export function useOptimisticBoardMutation<TVariables, TData>({
       }
     },
   })
+
+  useEffect(() => {
+    retry.current = mutation.mutate
+  }, [mutation.mutate])
+
+  return mutation
 }

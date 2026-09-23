@@ -66,4 +66,17 @@ describe('アプリ起動時の画面の出し分け（05 画面設計書 3章�
 
     expect(screen.getByRole('button', { name: '登録する' })).toBeInTheDocument()
   })
+
+  it('GET /api/auth/me が 500 のときは、ログイン画面ではなく読み込み失敗を出す', async () => {
+    // 未ログイン（401）と、サーバーが落ちている（500）は別のこと。
+    // ログイン画面を出すと「ログアウトされた」と誤解させてしまう（Issue #41 A-5）
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse(500, { detail: 'エラー' }))),
+    )
+    renderWithProviders(<App />)
+
+    expect(await screen.findByText('データを読み込めませんでした')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'ログイン' })).not.toBeInTheDocument()
+  })
 })

@@ -1,10 +1,11 @@
 /**
  * S-01 の表示エリア：ゴミ箱を表示しているとき（05 画面設計書 4.6）。
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ConfirmDialog } from '../../components/ConfirmDialog.tsx'
 import { FullScreenLoader } from '../../components/FullScreenLoader.tsx'
 import type { TrashItem } from '../../api/types.ts'
+import { useApiErrorNotifier } from '../../app/useApiErrorNotifier.ts'
 import { CONFIRM, EMPTY } from '../../messages.ts'
 import styles from './TrashView.module.css'
 import { formatDeletedAt, formatOriginalLocation, trashTypeLabel } from './trashFormat.ts'
@@ -32,6 +33,14 @@ export function TrashView() {
   const emptyTrash = useEmptyTrash()
 
   const [confirming, setConfirming] = useState<Confirming | null>(null)
+
+  // 一覧の読み込みに失敗したことを知らせる。401 ならログイン画面へ戻す（05 画面設計書 8.1）
+  const notifyError = useApiErrorNotifier()
+  const { error: loadError, refetch } = trashQuery
+  useEffect(() => {
+    if (!loadError) return
+    notifyError(loadError, { operation: 'load', onRetry: () => void refetch() })
+  }, [loadError, notifyError, refetch])
 
   if (trashQuery.isPending) {
     return (

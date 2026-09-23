@@ -4,10 +4,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { trashApi } from '../../api/endpoints.ts'
 import type { TrashItem, TrashType } from '../../api/types.ts'
-import { describeError } from '../../app/errorHandling.ts'
 import { queryKeys } from '../../app/queryKeys.ts'
+import { useApiErrorNotifier } from '../../app/useApiErrorNotifier.ts'
 import { useToast } from '../../components/toastContext.ts'
-import { useSessionExpiredHandler } from '../auth/useAuth.ts'
 
 /** 削除日時の新しい順。親がゴミ箱にある子は含まれない（サーバー側で除外済み） */
 export function useTrashList() {
@@ -34,25 +33,14 @@ function useRefreshAfterTrashChange() {
   }
 }
 
-/** 通信に失敗したときの共通の知らせ方 */
+/**
+ * 通信に失敗したときの共通の知らせ方。
+ * 401・404・[再試行] の扱いは画面共通なので useApiErrorNotifier に任せる
+ */
 function useTrashErrorHandler() {
-  const showToast = useToast()
-  const onSessionExpired = useSessionExpiredHandler()
-
-  return (error: unknown) => {
-    const handling = describeError(error, 'save')
-    if (handling.sessionExpired) {
-      onSessionExpired()
-      return
-    }
-    showToast({
-      kind: handling.kind,
-      message: handling.message,
-      action: handling.actionLabel
-        ? { label: handling.actionLabel, onClick: () => location.reload() }
-        : undefined,
-    })
-  }
+  const notifyError = useApiErrorNotifier()
+  return (error: unknown, onRetry?: () => void) =>
+    notifyError(error, { operation: 'save', onRetry })
 }
 
 /**
@@ -66,7 +54,7 @@ export function useRestoreFromTrash() {
   const showToast = useToast()
   const handleError = useTrashErrorHandler()
 
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: ({ type, id }: { type: TrashType; id: number }) => trashApi.restore(type, id),
     onSuccess: (result) => {
       refresh()
@@ -76,8 +64,9 @@ export function useRestoreFromTrash() {
         showToast({ kind: 'info', message: result.message })
       }
     },
-    onError: handleError,
+    onError: (error, variables) => handleError(error, () => mutation.mutate(variables)),
   })
+  return mutation
 }
 
 /** 完全に削除（F-43）。呼ぶ前に必ず確認ダイアログを出す（業務ルール 5.3） */
@@ -85,11 +74,12 @@ export function usePurgeFromTrash() {
   const refresh = useRefreshAfterTrashChange()
   const handleError = useTrashErrorHandler()
 
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: ({ type, id }: { type: TrashType; id: number }) => trashApi.purge(type, id),
     onSuccess: refresh,
-    onError: handleError,
+    onError: (error, variables) => handleError(error, () => mutation.mutate(variables)),
   })
+  return mutation
 }
 
 /** ゴミ箱を空にする（F-44）。こちらも確認ダイアログのあとで呼ぶ */
@@ -97,9 +87,10 @@ export function useEmptyTrash() {
   const refresh = useRefreshAfterTrashChange()
   const handleError = useTrashErrorHandler()
 
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: () => trashApi.empty(),
     onSuccess: refresh,
-    onError: handleError,
+    onError: (error) => handleError(error, () => mutation.mutate()),
   })
+  return mutation
 }
