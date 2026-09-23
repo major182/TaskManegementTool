@@ -5,7 +5,7 @@
  *     401 → S-02 ログイン画面
  *     200 → S-01 メイン画面
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FullScreenLoader } from './components/FullScreenLoader.tsx'
 import { LoadFailedScreen } from './components/LoadFailedScreen.tsx'
 import { LoginPage } from './features/auth/LoginPage.tsx'
@@ -15,9 +15,19 @@ import { MainScreen } from './features/board/MainScreen.tsx'
 
 /** 履歴に残す目印。新規登録画面を開いているときだけ付ける */
 const SIGNUP_HISTORY_STATE = { screen: 'signup' }
+/** 履歴に残す目印。ログインしてメイン画面（S-01）にいるときに付ける */
+const BOARD_HISTORY_STATE = { screen: 'board' }
+
+function screenInHistory(): string | undefined {
+  return (window.history.state as { screen?: string } | null)?.screen
+}
 
 function isSignupInHistory(): boolean {
-  return (window.history.state as { screen?: string } | null)?.screen === 'signup'
+  return screenInHistory() === 'signup'
+}
+
+function isBoardInHistory(): boolean {
+  return screenInHistory() === 'board'
 }
 
 export default function App() {
@@ -25,26 +35,45 @@ export default function App() {
   const sessionExpired = useSessionExpired()
   const [showSignup, setShowSignup] = useState(false)
 
+  // 「戻る」が押された時点でログイン中かどうかを知りたいが、
+  // 購読をやり直さずに済むよう、最新の値を箱に入れて参照する
+  const userRef = useRef(user)
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
+
   /**
-   * ブラウザの「戻る」に対応する。
+   * ブラウザの「戻る」に対応する（05 画面設計書 3章）。
    *
-   * 画面はルーターを使わず state だけで切り替えているため、そのままだと
-   * 新規登録画面で戻るを押したときにアプリの外へ出てしまい、画面が真っ白になる。
-   * 新規登録画面へ移るときに履歴を1つ積んでおき、戻るでログイン画面に返す。
+   * 画面はルーターを使わず state だけで切り替えているため、そのままでは
+   * 戻るを押すとアプリの外へ出てしまい、画面が真っ白になる。
+   * そこで画面ごとに履歴の目印を積み、戻るでアプリ内に留まるようにする。
+   *
+   *   新規登録画面（S-03）で戻る → ログイン画面（S-02）へ
+   *   メイン画面（S-01）で戻る   → メイン画面のまま（目印を積み直す）
    */
   useEffect(() => {
     function handlePopState() {
+      // ログイン中は出ていかない。目印を積み直して、今の画面に留まる
+      if (userRef.current) {
+        window.history.pushState(BOARD_HISTORY_STATE, '')
+        return
+      }
       setShowSignup(isSignupInHistory())
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
-  // ログイン・登録に成功したら、積んでおいた目印を消す。
-  // 残したままだと、メイン画面で戻るを押しても何も起きないように見えるため
+  // ログイン・登録に成功したら、メイン画面の目印に置き換える。
+  // 新規登録の目印が残っていると、戻ったときに新規登録画面へ行ってしまう
   useEffect(() => {
-    if (user && isSignupInHistory()) {
-      window.history.replaceState({}, '')
+    if (!user || isBoardInHistory()) return
+
+    if (isSignupInHistory()) {
+      window.history.replaceState(BOARD_HISTORY_STATE, '')
+    } else {
+      window.history.pushState(BOARD_HISTORY_STATE, '')
     }
   }, [user])
 
