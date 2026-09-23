@@ -123,7 +123,7 @@ class TrashServiceTest {
     }
 
     private Board board(Long id, String name, Instant deletedAt) {
-        Board board = new Board(USER_ID, name);
+        Board board = new Board(USER_ID, name, 0);
         setId(board, id);
         if (deletedAt != null) {
             board.moveToTrash(deletedAt);

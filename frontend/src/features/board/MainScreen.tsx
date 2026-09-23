@@ -15,6 +15,7 @@ import {
   useBoardDetail,
   useBoardList,
   useCreateBoard,
+  useMoveBoard,
   useRecordLastOpenedBoard,
   useRenameBoard,
   useTrashBoard,
@@ -40,6 +41,7 @@ export function MainScreen({ user }: { user: UserResponse }) {
   const createBoard = useCreateBoard()
   const renameBoard = useRenameBoard()
   const trashBoard = useTrashBoard()
+  const moveBoard = useMoveBoard()
   const recordLastOpened = useRecordLastOpenedBoard()
 
   const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null)
@@ -108,6 +110,7 @@ export function MainScreen({ user }: { user: UserResponse }) {
         onSelectBoard={selectBoard}
         onSelectTrash={() => setIsTrashActive(true)}
         onCreateBoard={handleCreateBoard}
+        onMoveBoard={(boardId, position) => moveBoard.mutate({ boardId, position })}
         onLogout={() => logout.mutate()}
         isLoggingOut={logout.isPending}
       />

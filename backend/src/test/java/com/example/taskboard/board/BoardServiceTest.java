@@ -23,6 +23,7 @@ import com.example.taskboard.auth.UserRepository;
 import com.example.taskboard.board.BoardDtos.BoardDetailResponse;
 import com.example.taskboard.card.Card;
 import com.example.taskboard.card.CardRepository;
+import com.example.taskboard.common.BadRequestException;
 import com.example.taskboard.common.NotFoundException;
 import com.example.taskboard.list.TaskList;
 import com.example.taskboard.list.TaskListRepository;
@@ -77,7 +78,7 @@ class BoardServiceTest {
 
     @Test
     void ゴミ箱へ移動してもリストとカードの削除日時は変えない() {
-        Board board = new Board(USER_ID, "学習計画");
+        Board board = new Board(USER_ID, "学習計画", 0);
         when(boardRepository.findByIdAndUserIdAndDeletedAtIsNull(BOARD_ID, USER_ID))
                 .thenReturn(Optional.of(board));
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(new User("taro_123", "hash")));
@@ -95,7 +96,7 @@ class BoardServiceTest {
         User user = new User("taro_123", "hash");
         user.setLastOpenedBoardId(BOARD_ID);
         when(boardRepository.findByIdAndUserIdAndDeletedAtIsNull(BOARD_ID, USER_ID))
-                .thenReturn(Optional.of(new Board(USER_ID, "学習計画")));
+                .thenReturn(Optional.of(new Board(USER_ID, "学習計画", 0)));
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
 
         boardService.moveToTrash(USER_ID, BOARD_ID);
@@ -108,7 +109,7 @@ class BoardServiceTest {
         User user = new User("taro_123", "hash");
         user.setLastOpenedBoardId(99L);
         when(boardRepository.findByIdAndUserIdAndDeletedAtIsNull(BOARD_ID, USER_ID))
-                .thenReturn(Optional.of(new Board(USER_ID, "学習計画")));
+                .thenReturn(Optional.of(new Board(USER_ID, "学習計画", 0)));
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
 
         boardService.moveToTrash(USER_ID, BOARD_ID);
@@ -119,7 +120,7 @@ class BoardServiceTest {
     @Test
     void リストが1つもないボードではカードを問い合わせない() {
         when(boardRepository.findByIdAndUserIdAndDeletedAtIsNull(BOARD_ID, USER_ID))
-                .thenReturn(Optional.of(new Board(USER_ID, "学習計画")));
+                .thenReturn(Optional.of(new Board(USER_ID, "学習計画", 0)));
         when(taskListRepository.findByBoardIdAndDeletedAtIsNullOrderByPositionAsc(BOARD_ID))
                 .thenReturn(List.of());
 
@@ -134,7 +135,7 @@ class BoardServiceTest {
         TaskList todo = list(3L, "TODO", 0);
         TaskList doing = list(4L, "DOING", 1);
         when(boardRepository.findByIdAndUserIdAndDeletedAtIsNull(BOARD_ID, USER_ID))
-                .thenReturn(Optional.of(new Board(USER_ID, "学習計画")));
+                .thenReturn(Optional.of(new Board(USER_ID, "学習計画", 0)));
         when(taskListRepository.findByBoardIdAndDeletedAtIsNullOrderByPositionAsc(BOARD_ID))
                 .thenReturn(List.of(todo, doing));
         // カードは1回の問い合わせでまとめて返る（N+1 を避けるため）
@@ -170,4 +171,71 @@ class BoardServiceTest {
             throw new IllegalStateException(e);
         }
     }
+
+    @Test
+    void 並び替えると表示するボードが0から振り直される() {
+        // 上から A・B・C の並び。C を一番上へ動かす
+        Board a = board(1L, "A", 0);
+        Board b = board(2L, "B", 1);
+        Board c = board(BOARD_ID, "C", 2);
+        when(boardRepository.findByIdAndUserIdAndDeletedAtIsNull(BOARD_ID, USER_ID))
+                .thenReturn(Optional.of(c));
+        when(boardRepository.findByUserIdAndDeletedAtIsNullOrderByPositionAsc(USER_ID))
+                .thenReturn(List.of(a, b, c));
+        when(boardRepository.findByUserIdAndDeletedAtIsNotNullOrderByDeletedAtAscIdAsc(USER_ID))
+                .thenReturn(List.of());
+
+        List<Board> moved = boardService.move(USER_ID, BOARD_ID, 0);
+
+        assertThat(moved).containsExactly(c, a, b);
+        assertThat(c.getPosition()).isEqualTo(0);
+        assertThat(a.getPosition()).isEqualTo(1);
+        assertThat(b.getPosition()).isEqualTo(2);
+    }
+
+    @Test
+    void ゴミ箱のボードは表示するボードの後ろに詰められる() {
+        // 一意制約はゴミ箱の行も対象なので、表示する行を前・ゴミ箱を後ろに置き直す
+        Board live = board(BOARD_ID, "表示中", 0);
+        Board trashed = board(99L, "ゴミ箱の中", 1);
+        when(boardRepository.findByIdAndUserIdAndDeletedAtIsNull(BOARD_ID, USER_ID))
+                .thenReturn(Optional.of(live));
+        when(boardRepository.findByUserIdAndDeletedAtIsNullOrderByPositionAsc(USER_ID))
+                .thenReturn(List.of(live));
+        when(boardRepository.findByUserIdAndDeletedAtIsNotNullOrderByDeletedAtAscIdAsc(USER_ID))
+                .thenReturn(List.of(trashed));
+
+        boardService.move(USER_ID, BOARD_ID, 0);
+
+        assertThat(live.getPosition()).isEqualTo(0);
+        assertThat(trashed.getPosition()).isEqualTo(1);
+    }
+
+    @Test
+    void ボードの数を超える位置は置けない() {
+        Board only = board(BOARD_ID, "1つだけ", 0);
+        when(boardRepository.findByIdAndUserIdAndDeletedAtIsNull(BOARD_ID, USER_ID))
+                .thenReturn(Optional.of(only));
+        when(boardRepository.findByUserIdAndDeletedAtIsNullOrderByPositionAsc(USER_ID))
+                .thenReturn(List.of(only));
+
+        assertThatThrownBy(() -> boardService.move(USER_ID, BOARD_ID, 1))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("指定された位置にはボードを置けません");
+    }
+
+
+    /** id はデータベースが採番するため、テストではリフレクションで入れる（リストのテストと同じ） */
+    private Board board(Long id, String name, int position) {
+        Board board = new Board(USER_ID, name, position);
+        try {
+            var field = Board.class.getDeclaredField("id");
+            field.setAccessible(true);
+            field.set(board, id);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+        return board;
+    }
+
 }

@@ -7,8 +7,17 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface BoardRepository extends JpaRepository<Board, Long> {
 
-    /** サイドバー用の一覧。作成日の新しい順（docs/01-3_business-rules.md 5.2）。 */
-    List<Board> findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(Long userId);
+    /** サイドバー用の一覧。利用者が並べた順（docs/01-3_business-rules.md 5.2）。 */
+    List<Board> findByUserIdAndDeletedAtIsNullOrderByPositionAsc(Long userId);
+
+    /**
+     * ゴミ箱に入っているボード（削除した順）。
+     * 並びを詰め直すときに末尾へ寄せるために使う（docs/03_db-design.md 5.3）。
+     */
+    List<Board> findByUserIdAndDeletedAtIsNotNullOrderByDeletedAtAscIdAsc(Long userId);
+
+    /** ゴミ箱の分も含めた利用者のボード数。まだ使われていない position を求めるのに使う。 */
+    int countByUserId(Long userId);
 
     /**
      * 1件取得。「自分のものか」「ゴミ箱に入っていないか」を検索条件に含める。

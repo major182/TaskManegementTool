@@ -7,8 +7,9 @@ import { authApi, boardApi, trashApi } from '../../api/endpoints.ts'
 import type { BoardDetail, BoardSummary } from '../../api/types.ts'
 import { queryKeys } from '../../app/queryKeys.ts'
 import { useApiErrorNotifier } from '../../app/useApiErrorNotifier.ts'
+import { reorderBoards } from './boardOrder.ts'
 
-/** 作成日の新しい順。ゴミ箱のボードは含まれない（サーバー側で除外済み） */
+/** 利用者が並べた順（上から下）。ゴミ箱のボードは含まれない（サーバー側で除外済み） */
 export function useBoardList() {
   return useQuery<BoardSummary[]>({
     queryKey: queryKeys.boards,
@@ -119,6 +120,47 @@ export function useTrashBoard() {
  * 最後に開いたボードを記録する（F-15）。
  * 記録できなくても利用者の操作は妨げないため、失敗しても何も出さない。
  */
+/**
+ * ボードの並び替え（F-16）。
+ * サイドバーは1つのキャッシュ（boards）だけを見ているので、
+ * 先に並びを書き換えてから通信する（楽観的更新／05 画面設計書 9章）。
+ */
+export function useMoveBoard() {
+  const queryClient = useQueryClient()
+  const notifyError = useApiErrorNotifier()
+
+  const mutation = useMutation({
+    mutationFn: ({ boardId, position }: { boardId: number; position: number }) =>
+      boardApi.move(boardId, position),
+
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.boards })
+      const previous = queryClient.getQueryData<BoardSummary[]>(queryKeys.boards)
+      if (previous) {
+        queryClient.setQueryData(
+          queryKeys.boards,
+          reorderBoards(previous, variables.boardId, variables.position),
+        )
+      }
+      return { previous }
+    },
+
+    onError: (error, variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.boards, context.previous)
+      }
+      notifyError(error, { operation: 'save', onRetry: () => mutation.mutate(variables) })
+    },
+
+    // 並び順の振り直しはサーバーが行うため、結果で合わせ直す（04 API設計書 4.7-2）
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.boards })
+    },
+  })
+
+  return mutation
+}
+
 export function useRecordLastOpenedBoard() {
   return useMutation({
     mutationFn: (boardId: number) => authApi.setLastOpenedBoard(boardId),

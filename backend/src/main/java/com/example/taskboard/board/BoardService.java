@@ -1,6 +1,7 @@
 package com.example.taskboard.board;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -15,6 +16,7 @@ import com.example.taskboard.board.BoardDtos.CardResponse;
 import com.example.taskboard.board.BoardDtos.ListResponse;
 import com.example.taskboard.card.Card;
 import com.example.taskboard.card.CardRepository;
+import com.example.taskboard.common.BadRequestException;
 import com.example.taskboard.common.NotFoundException;
 import com.example.taskboard.list.TaskList;
 import com.example.taskboard.list.TaskListRepository;
@@ -42,16 +44,48 @@ public class BoardService {
         this.userRepository = userRepository;
     }
 
-    /** サイドバー用の一覧（F-11）。作成日の新しい順。 */
+    /** サイドバー用の一覧（F-11）。利用者が並べた順（上から下）。 */
     @Transactional(readOnly = true)
     public List<Board> findAll(Long userId) {
-        return boardRepository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
+        return boardRepository.findByUserIdAndDeletedAtIsNullOrderByPositionAsc(userId);
     }
 
-    /** ボード作成（F-12）。 */
+    /**
+     * ボード作成（F-12）。position は指定させず、一番下に置く
+     * （docs/03_db-design.md 5.2）。
+     */
     @Transactional
     public Board create(Long userId, String name) {
-        return boardRepository.save(new Board(userId, name.trim()));
+        // いったん、まだ誰も使っていない位置（今ある行数）で作ってから全体を振り直す。
+        // 表示するボードの末尾はゴミ箱の行が使っていることがあるため、直接は置けない
+        int free = boardRepository.countByUserId(userId);
+        Board board = boardRepository.save(new Board(userId, name.trim(), free));
+
+        renumber(userId, liveBoards(userId));
+        return board;
+    }
+
+    /**
+     * 並び替え（F-16）。
+     * いったん今の並びから取り出し、指定された位置に入れ直してから 0 から振り直す。
+     * リストの並び替え（F-24）と同じ考え方（docs/04_api-design.md 4.7-2）。
+     *
+     * @return 並び替えたあとの、表示するボード（position の昇順）
+     */
+    @Transactional
+    public List<Board> move(Long userId, Long boardId, int position) {
+        Board board = requireOwned(userId, boardId);
+
+        List<Board> boards = liveBoards(userId);
+        if (position >= boards.size()) {
+            throw new BadRequestException("指定された位置にはボードを置けません");
+        }
+
+        boards.removeIf(sibling -> sibling.getId().equals(boardId));
+        boards.add(position, board);
+        renumber(userId, boards);
+
+        return boards;
     }
 
     /**
@@ -101,6 +135,11 @@ public class BoardService {
         Board board = requireOwned(userId, boardId);
         board.moveToTrash(Instant.now());
 
+        // 残ったボードは position を詰め直し、0 からの連番を保つ（docs/03_db-design.md 5.3）
+        List<Board> remaining = liveBoards(userId);
+        remaining.removeIf(sibling -> sibling.getId().equals(boardId));
+        renumber(userId, remaining);
+
         // 最後に開いたボードとして覚えていたら忘れる。
         // ゴミ箱のボードは表示できないため、覚えたままだと次に開いたときに 404 になる（F-15）。
         User user = requireUser(userId);
@@ -131,6 +170,13 @@ public class BoardService {
     public Board restore(Long userId, Long boardId) {
         Board board = requireTrashed(userId, boardId);
         board.restore();
+
+        // 一番下に戻す（業務ルール 5.3。リスト・カードと同じ扱い）
+        List<Board> boards = liveBoards(userId);
+        boards.removeIf(sibling -> sibling.getId().equals(boardId));
+        boards.add(board);
+        renumber(userId, boards);
+
         return board;
     }
 
@@ -171,6 +217,27 @@ public class BoardService {
     public Board requireOwned(Long userId, Long boardId) {
         return boardRepository.findByIdAndUserIdAndDeletedAtIsNull(boardId, userId)
                 .orElseThrow(() -> new NotFoundException("ボードが見つかりません"));
+    }
+
+    /** 表示するボード（上から下の順）。並べ替えるので可変リストにする。 */
+    private List<Board> liveBoards(Long userId) {
+        return new ArrayList<>(boardRepository.findByUserIdAndDeletedAtIsNullOrderByPositionAsc(userId));
+    }
+
+    /**
+     * 利用者のボードの position を振り直す。
+     * 渡された「表示するボード」を並んでいる順に 0 から、
+     * 続けてゴミ箱のボードを削除した順に並べる。
+     * 一意制約はゴミ箱の行も対象なので、こうしないと詰め直しでぶつかる
+     * （docs/03_db-design.md 5.3）。
+     */
+    private void renumber(Long userId, List<Board> ordered) {
+        List<Board> all = new ArrayList<>(ordered);
+        all.addAll(boardRepository.findByUserIdAndDeletedAtIsNotNullOrderByDeletedAtAscIdAsc(userId));
+
+        for (int i = 0; i < all.size(); i++) {
+            all.get(i).moveTo(i);
+        }
     }
 
     /** ログイン中の利用者。Security を通っている以上、見つからないのは異常事態。 */

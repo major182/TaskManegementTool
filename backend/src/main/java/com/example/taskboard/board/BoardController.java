@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -17,8 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.taskboard.auth.AppUserDetails;
 import com.example.taskboard.board.BoardDtos.BoardCreatedResponse;
 import com.example.taskboard.board.BoardDtos.BoardDetailResponse;
+import com.example.taskboard.board.BoardDtos.BoardMoveRequest;
 import com.example.taskboard.board.BoardDtos.BoardNameRequest;
 import com.example.taskboard.board.BoardDtos.BoardNameResponse;
+import com.example.taskboard.board.BoardDtos.BoardPositionResponse;
 import com.example.taskboard.board.BoardDtos.BoardSummaryResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,7 +45,7 @@ public class BoardController {
 
     /** ボード一覧（F-11）。サイドバー用なのでリスト・カードは含めない。 */
     @GetMapping
-    @Operation(summary = "ボード一覧", description = "作成日の新しい順。ゴミ箱のボードは含まない")
+    @Operation(summary = "ボード一覧", description = "利用者が並べた順。ゴミ箱のボードは含まない")
     public List<BoardSummaryResponse> list(@AuthenticationPrincipal AppUserDetails user) {
         return boardService.findAll(user.getId()).stream()
                 .map(BoardSummaryResponse::from)
@@ -75,6 +78,17 @@ public class BoardController {
                                         @PathVariable Long boardId,
                                     @Valid @RequestBody BoardNameRequest request) {
         return BoardNameResponse.from(boardService.rename(user.getId(), boardId, request.name()));
+    }
+
+    /** 並び替え（F-16）。再採番の結果をそのまま返す。 */
+    @PatchMapping("/{boardId}/move")
+    @Operation(summary = "ボードの並び替え", description = "並び替えたあとのボードの順番を返す")
+    public List<BoardPositionResponse> move(@AuthenticationPrincipal AppUserDetails user,
+                                            @PathVariable Long boardId,
+                                            @Valid @RequestBody BoardMoveRequest request) {
+        return boardService.move(user.getId(), boardId, request.position()).stream()
+                .map(BoardPositionResponse::from)
+                .toList();
     }
 
     /** ゴミ箱へ移動（F-14）。確認ダイアログは出さない（docs/01-3_business-rules.md 5.3）。 */

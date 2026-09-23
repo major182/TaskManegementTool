@@ -3,6 +3,7 @@ package com.example.taskboard.board;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -95,15 +96,71 @@ class BoardApiTest {
     }
 
     @Test
-    void 一覧は作成日の新しい順で返る() throws Exception {
+    void 一覧は利用者が並べた順で返り新しいボードは一番下になる() throws Exception {
         MockHttpSession session = signup("order");
-        long first = createBoard(session, "古いボード");
-        long second = createBoard(session, "新しいボード");
+        long first = createBoard(session, "先に作ったボード");
+        long second = createBoard(session, "あとで作ったボード");
 
+        // 作った順に上から並ぶ（新しいものが一番下。業務ルール 5.2）
         mockMvc.perform(get("/api/boards").session(session))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(second))
-                .andExpect(jsonPath("$[1].id").value(first));
+                .andExpect(jsonPath("$[0].id").value(first))
+                .andExpect(jsonPath("$[1].id").value(second));
+    }
+
+    @Test
+    void 並び替えると次の一覧からその順で返る() throws Exception {
+        MockHttpSession session = signup("bmove");
+        long first = createBoard(session, "1番目");
+        long second = createBoard(session, "2番目");
+        long third = createBoard(session, "3番目");
+
+        // 3番目を一番上へ動かす
+        mockMvc.perform(patch("/api/boards/" + third + "/move")
+                        .session(session)
+                        .with(SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"position\": 0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(third))
+                .andExpect(jsonPath("$[0].position").value(0))
+                .andExpect(jsonPath("$[1].id").value(first))
+                .andExpect(jsonPath("$[1].position").value(1))
+                .andExpect(jsonPath("$[2].id").value(second))
+                .andExpect(jsonPath("$[2].position").value(2));
+
+        mockMvc.perform(get("/api/boards").session(session))
+                .andExpect(jsonPath("$[0].id").value(third))
+                .andExpect(jsonPath("$[1].id").value(first))
+                .andExpect(jsonPath("$[2].id").value(second));
+    }
+
+    @Test
+    void ボードの数を超える位置は400になる() throws Exception {
+        MockHttpSession session = signup("bmoveng");
+        long boardId = createBoard(session, "1つだけ");
+
+        mockMvc.perform(patch("/api/boards/" + boardId + "/move")
+                        .session(session)
+                        .with(SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"position\": 5}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("指定された位置にはボードを置けません"));
+    }
+
+    @Test
+    void 他人のボードは並び替えられない() throws Exception {
+        MockHttpSession owner = signup("bowner");
+        long boardId = createBoard(owner, "他人のボード");
+
+        MockHttpSession other = signup("bother");
+        mockMvc.perform(patch("/api/boards/" + boardId + "/move")
+                        .session(other)
+                        .with(SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"position\": 0}"))
+                .andExpect(status().isNotFound());
     }
 
     @Test
