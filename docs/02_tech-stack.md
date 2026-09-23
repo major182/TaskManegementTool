@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.8（ドラフト） |
+| ドキュメント版数 | 0.9（ドラフト） |
 | 作成日 | 2026-09-17 |
-| 最終更新日 | 2026-09-22 |
+| 最終更新日 | 2026-09-23 |
 | 作成者 | （氏名） |
 | ステータス | レビュー待ち |
 
@@ -33,7 +33,7 @@
 │ ブラウザ       │ ───────────────▶ │ Spring Boot       │ ─────────▶ │ PostgreSQL │
 │ React (SPA)  │ ◀─────────────── │ REST API          │ ◀───────── │            │
 └──────────────┘                   └──────────────────┘            └────────────┘
-   Vercel                              Render                          Neon
+   AWS（静的配信）                      AWS（コンテナ実行）              AWS（RDS for PostgreSQL）
 ```
 
 ### 2.1 バックエンドの層構成
@@ -104,9 +104,10 @@ TaskManegementTool/
 | エディタ | IntelliJ IDEA Community Edition（Java）／VS Code（React） | Java は IntelliJ の補完・デバッグが強い。VS Code 1本にまとめる場合は Extension Pack for Java を入れる |
 | ソース管理 | Git / GitHub | 現場では必ず使う |
 | CI | GitHub Actions | push のたびにビルドとテストを自動で動かせる。GitHub と同じ場所で完結する。設定は `.github/workflows/ci.yml`（v0.8 で作成）。PR ごとにフロントエンドの `npm run check`・`npm run build` と、バックエンドの `./gradlew check` を実行する |
-| 公開先（フロントエンド） | Vercel | 無料で静的サイトを HTTPS 公開でき、GitHub と連携して自動デプロイできる |
-| 公開先（バックエンド） | Render（Docker で公開） | Java（Spring Boot）を無料プランで動かせる。※しばらくアクセスがないと停止し、次のアクセスで起動に数十秒かかる |
-| 公開先（データベース） | Neon | PostgreSQL を無料で使え、Render の無料 DB のような利用期限がない |
+| 公開先 | **AWS**（使用するサービスは指定待ち） | 課題の指定により AWS を使う。どのサービスで動かすかは未定（[Issue #48](https://github.com/major182/TaskManegementTool/issues/48)）。候補は次のとおり（v0.9 で Vercel / Render / Neon から変更） |
+| ┗ 画面（React） | S3 ＋ CloudFront ／ Amplify Hosting ／ バックエンドに同梱 | 静的ファイルを HTTPS で配信できればよい。**CloudFront で `/api/*` を API へ転送するか、バックエンドに同梱すると、画面と API が同じドメインになり、CORS と CSRF の面倒がなくなる** |
+| ┗ API（Spring Boot） | App Runner ／ ECS (Fargate) ＋ ALB ／ EC2 | コンテナで動かす前提で `backend/Dockerfile` を用意済み。待ち受けポートは環境変数 `PORT` で受け取る |
+| ┗ データベース | RDS for PostgreSQL | 本番と開発で同じ PostgreSQL を使う。接続情報は環境変数で渡す |
 
 ### 3.5 実装時に確定したバージョン（2026-09-20）
 
@@ -164,7 +165,7 @@ TaskManegementTool/
 | 認可（アクセス制限） | `/api/auth/**` 以外の API は、ログイン済みでなければ 401 を返す。さらに各処理で「ログイン中の利用者のデータか」を確認し、他人のデータなら 404 を返す |
 | CSRF 対策 | Cookie でセッションを持つため、Spring Security の CSRF トークンを有効にする（`CookieCsrfTokenRepository`） |
 | 対象外 | パスワード再設定、退会、メールアドレス登録、ログイン失敗回数によるロック |
-| 開発・公開時の注意 | 画面（Vercel）と API（Render）でドメインが違うため、CORS の許可設定と、Cookie を送るための `credentials: 'include'` が必要 |
+| 開発・公開時の注意 | 画面と API を**別のドメイン**で公開する場合は、CORS の許可設定と、Cookie を送るための `credentials: 'include'` に加え、**CSRF トークンの Cookie を画面側の JavaScript から読めるようにする手当て**が必要（今の実装は同じドメインで配信する前提。[Issue #48](https://github.com/major182/TaskManegementTool/issues/48)）。同じドメインで配信すれば、いずれも不要になる |
 
 > セッション方式（Cookie）と JWT 方式を比べ、**セッション方式**を選びました。Spring Security の標準機能をそのまま使え、ログアウトでサーバー側から無効にできるためです。
 
@@ -189,6 +190,7 @@ TaskManegementTool/
 ## 改訂履歴
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.9 | 2026-09-23 | 公開先を AWS に変更（課題の指定）。2 システム構成図・3.4 公開先・5.1 の注意を書き換え、画面と API を同じドメインで配信する方針を追記 | |
 | 0.8 | 2026-09-22 | 静的チェックを導入。バックエンドに Spotless・Checkstyle を追加し、oxlint のルールを強化。CI（GitHub Actions）を作成 | |
 | 0.7 | 2026-09-20 | 実装開始にあたり、3.5「実装時に確定したバージョン」を追加。コード整形・チェックを ESLint から oxlint に変更（Vite テンプレートの既定に合わせた） | |
 | 0.6 | 2026-09-20 | 2.2 フォルダ構成に README.md と docs/ フォルダを反映（ドキュメントを docs/ に移動） | |

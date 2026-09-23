@@ -74,7 +74,7 @@
 | データベース | PostgreSQL（マイグレーションは Flyway） |
 | フロントエンド | React / TypeScript / Vite（TanStack Query、dnd-kit、CSS Modules） |
 | テスト | JUnit 5・Mockito・Testcontainers / Vitest・React Testing Library |
-| 公開先 | フロント：Vercel ／ API：Render ／ DB：Neon |
+| 公開先 | AWS（使用するサービスは指定待ち）|
 
 ---
 
@@ -127,6 +127,42 @@ npm run dev
 ```
 
 <http://localhost:5173> で開きます。`/api` への通信はバックエンドへ自動で転送されます。
+
+---
+
+## 公開（リリース）について
+
+公開先は **AWS** を予定しています。どのサービスを使うかは指定待ちのため、
+決まっていなくても用意できるところまでを済ませてあります（[Issue #48](https://github.com/major182/TaskManegementTool/issues/48)）。
+
+### 用意できているもの
+
+| 内容 | 場所 |
+|---|---|
+| バックエンドのコンテナ化 | `backend/Dockerfile`（App Runner・ECS・EC2 のいずれでも使える） |
+| 待ち受けポートの指定 | 環境変数 `PORT`（既定 8080） |
+| TLS を終端する経路への対応 | `server.forward-headers-strategy: framework`（ALB・CloudFront の配下で必要） |
+| 死活確認 | `GET /actuator/health`（未ログインで叩ける。中身は返さない） |
+
+### 公開時に設定する環境変数
+
+| 変数名 | 内容 | 例 |
+|---|---|---|
+| `DB_URL` | データベースの接続先 | `jdbc:postgresql://<ホスト>:5432/taskboard` |
+| `DB_USERNAME` | データベースの利用者名 | `taskboard` |
+| `DB_PASSWORD` | データベースのパスワード | （秘密情報。コンテナの環境変数などで渡す） |
+| `CORS_ALLOWED_ORIGINS` | 画面の公開ドメイン。**画面と API を同じドメインで配信する場合は不要** | `https://example.com` |
+| `PORT` | 待ち受けポート。実行環境が指定する場合のみ | `8080` |
+
+> 設定しないと、データベースは `localhost`、CORS は `http://localhost:5173` という開発用の値が使われます。
+> 公開時は必ず設定してください。
+
+### 決めてから進めること
+
+画面と API を**同じドメインで配信するか**を先に決める必要があります。
+別のドメインにする場合、今の実装のままでは更新系の通信がすべて失敗します
+（CSRF トークンの Cookie を画面側の JavaScript から読めないため）。
+CloudFront で `/api/*` を API へ転送する、またはバックエンドに画面を同梱すると、この問題は起きません。
 
 ---
 

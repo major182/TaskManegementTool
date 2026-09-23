@@ -62,6 +62,11 @@ public class SecurityConfig {
                                 PathPatternRequestMatcher.withDefaults().matcher("/api/auth/signup"),
                                 PathPatternRequestMatcher.withDefaults().matcher("/api/auth/login"))
                         .permitAll()
+                        // 死活確認。ロードバランサ等が未ログインで叩くため通す。
+                        // 中身は返さない設定にしてあるので、外に出しても情報は漏れない
+                        .requestMatchers(
+                                PathPatternRequestMatcher.withDefaults().matcher("/actuator/health"))
+                        .permitAll()
                         .requestMatchers(
                                 PathPatternRequestMatcher.withDefaults().matcher("/v3/api-docs/**"),
                                 PathPatternRequestMatcher.withDefaults().matcher("/swagger-ui/**"),
