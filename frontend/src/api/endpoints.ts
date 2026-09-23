@@ -10,6 +10,7 @@ import type {
   Card,
   CardMoveResult,
   CredentialsRequest,
+  BoardPosition,
   ListPosition,
   NameChangedResponse,
   RestoreResult,
@@ -49,7 +50,7 @@ export const authApi = {
 // ---------- ボード（04 3.2） ----------
 
 export const boardApi = {
-  /** サイドバー用。作成日の新しい順 */
+  /** サイドバー用。利用者が並べた順（上から下） */
   list: () => api.get<BoardSummary[]>('/boards'),
   create: (name: string) => api.post<BoardCreatedResponse>('/boards', { name }),
   /** 画面表示用。リスト・カードが入れ子で返る */
@@ -58,6 +59,9 @@ export const boardApi = {
     api.put<NameChangedResponse>(`/boards/${boardId}`, { name }),
   /** ゴミ箱へ移動（確認ダイアログは出さない） */
   trash: (boardId: number) => api.delete<void>(`/boards/${boardId}`),
+  /** 並び替え。応答は再採番後のボードの順番 */
+  move: (boardId: number, position: number) =>
+    api.patch<BoardPosition[]>(`/boards/${boardId}/move`, { position }),
 }
 
 // ---------- リスト（04 3.3） ----------

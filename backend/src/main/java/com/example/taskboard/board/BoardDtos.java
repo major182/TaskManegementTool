@@ -7,6 +7,7 @@ import java.util.List;
 import com.example.taskboard.card.Card;
 import com.example.taskboard.list.TaskList;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -28,6 +29,27 @@ public final class BoardDtos {
             @NotBlank(message = "ボード名を入力してください")
             @Size(max = 50, message = "ボード名は50文字以内で入力してください")
             String name) {
+    }
+
+    /**
+     * 並び替えの入力（4.7-2）。上から何番目に置くかで、0 が一番上。
+     * 負の数はここで弾き、「ボードの数より大きい」は今の状態しだいなので Service で見る。
+     */
+    public record BoardMoveRequest(
+            @NotNull(message = "位置を指定してください")
+            @Min(value = 0, message = "位置は0以上で指定してください")
+            Integer position) {
+    }
+
+    /**
+     * 並び替えの結果（4.7-2）。再採番はサーバーが行うため、並び順そのものを返す。
+     * 画面は先に動かして表示し（楽観的更新）、この結果で正しい状態に合わせる。
+     */
+    public record BoardPositionResponse(Long id, int position) {
+
+        public static BoardPositionResponse from(Board board) {
+            return new BoardPositionResponse(board.getId(), board.getPosition());
+        }
     }
 
     /** PUT /api/me/last-opened-board のリクエスト（4.4 の F-15）。 */

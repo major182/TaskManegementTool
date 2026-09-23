@@ -114,3 +114,12 @@
 .logout:hover {
   background: rgba(255, 255, 255, 0.1);
 }
+
+/* 並び替え中の行。つかんでいる行を薄くして、どこを動かしているか分かるようにする（F-16） */
+.dragging {
+  opacity: 0.5;
+}
+
+.navItem {
+  touch-action: none;
+}

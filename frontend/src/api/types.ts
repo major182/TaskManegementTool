@@ -25,6 +25,8 @@ export type CredentialsRequest = {
 export type BoardSummary = {
   id: number
   name: string
+  /** サイドバーでの並び順。0 が一番上 */
+  position: number
   /** ISO 8601・UTC の文字列。日本時間への変換は画面側で行う */
   createdAt: string
 }
@@ -66,6 +68,12 @@ export type NameChangedResponse = {
 }
 
 // ---------- 並び替え・移動（04 4.9・4.12） ----------
+
+/** ボード並び替え後の、サイドバーのボードの順番 */
+export type BoardPosition = {
+  id: number
+  position: number
+}
 
 /** リスト並び替え後の、ボード内のリストの順番 */
 export type ListPosition = {

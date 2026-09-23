@@ -35,6 +35,10 @@ public class Board {
     @Column(nullable = false, length = 50)
     private String name;
 
+    /** サイドバーでの並び順。0 が一番上（docs/01-3_business-rules.md 5.2）。 */
+    @Column(nullable = false)
+    private int position;
+
     // 作成日時は Hibernate が保存時に入れる（DDL の DEFAULT now() は、SQL を直接実行したときの保険）
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -53,9 +57,15 @@ public class Board {
     protected Board() {
     }
 
-    public Board(Long userId, String name) {
+    public Board(Long userId, String name, int position) {
         this.userId = userId;
         this.name = name;
+        this.position = position;
+    }
+
+    /** 並び順の付け替え。詰め直し・並び替えのどちらでも使う。 */
+    public void moveTo(int position) {
+        this.position = position;
     }
 
     /** ボード名の変更（F-13）。 */
@@ -84,6 +94,10 @@ public class Board {
 
     public String getName() {
         return name;
+    }
+
+    public int getPosition() {
+        return position;
     }
 
     public Instant getCreatedAt() {

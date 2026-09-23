@@ -158,7 +158,7 @@ class TaskListServiceTest {
         org.mockito.Mockito.lenient()
                 .when(taskListRepository.findByBoardIdAndDeletedAtIsNotNullOrderByDeletedAtAscIdAsc(BOARD_ID))
                 .thenReturn(List.of());
-        when(boardService.requireOwned(USER_ID, BOARD_ID)).thenReturn(new Board(USER_ID, "学習計画"));
+        when(boardService.requireOwned(USER_ID, BOARD_ID)).thenReturn(new Board(USER_ID, "学習計画", 0));
     }
 
     private TaskList list(Long id, String name, int position) {
