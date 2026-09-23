@@ -39,3 +39,12 @@ app:
 logging:
   level:
     org.springframework.security: INFO
+
+# API の説明画面（Swagger UI）は既定で閉じる。
+# 誰でも API の一覧と試し打ちができてしまうため、開発用の local プロファイルだけで開く
+# （docs/04_api-design.md 6章）
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

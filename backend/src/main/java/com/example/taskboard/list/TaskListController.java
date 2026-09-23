@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,7 +13,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.taskboard.auth.CurrentUser;
+import com.example.taskboard.auth.AppUserDetails;
 import com.example.taskboard.list.TaskListDtos.MoveRequest;
 import com.example.taskboard.list.TaskListDtos.TaskListCreatedResponse;
 import com.example.taskboard.list.TaskListDtos.TaskListNameRequest;
@@ -33,19 +34,18 @@ import jakarta.validation.Valid;
 public class TaskListController {
 
     private final TaskListService taskListService;
-    private final CurrentUser currentUser;
 
-    public TaskListController(TaskListService taskListService, CurrentUser currentUser) {
+    public TaskListController(TaskListService taskListService) {
         this.taskListService = taskListService;
-        this.currentUser = currentUser;
     }
 
     /** リスト作成（F-21）。位置は指定させず、サーバーが一番右に置く。 */
     @PostMapping("/api/boards/{boardId}/lists")
     @Operation(summary = "リスト作成", description = "ボードの一番右に追加する")
-    public ResponseEntity<TaskListCreatedResponse> create(@PathVariable Long boardId,
+    public ResponseEntity<TaskListCreatedResponse> create(@AuthenticationPrincipal AppUserDetails user,
+                                                              @PathVariable Long boardId,
                                                           @Valid @RequestBody TaskListNameRequest request) {
-        TaskList list = taskListService.create(currentUser.requireId(), boardId, request.name());
+        TaskList list = taskListService.create(user.getId(), boardId, request.name());
 
         return ResponseEntity.created(URI.create("/api/lists/" + list.getId()))
                 .body(TaskListCreatedResponse.from(list));
@@ -54,26 +54,29 @@ public class TaskListController {
     /** リスト名の変更（F-22）。 */
     @PutMapping("/api/lists/{listId}")
     @Operation(summary = "リスト名の変更")
-    public TaskListNameResponse rename(@PathVariable Long listId,
+    public TaskListNameResponse rename(@AuthenticationPrincipal AppUserDetails user,
+                                           @PathVariable Long listId,
                                        @Valid @RequestBody TaskListNameRequest request) {
         return TaskListNameResponse.from(
-                taskListService.rename(currentUser.requireId(), listId, request.name()));
+                taskListService.rename(user.getId(), listId, request.name()));
     }
 
     /** ゴミ箱へ移動（F-23）。中のカードごと移動する。 */
     @DeleteMapping("/api/lists/{listId}")
     @Operation(summary = "リストをゴミ箱へ移動", description = "残ったリストの並び順は詰め直される")
-    public ResponseEntity<Void> moveToTrash(@PathVariable Long listId) {
-        taskListService.moveToTrash(currentUser.requireId(), listId);
+    public ResponseEntity<Void> moveToTrash(@AuthenticationPrincipal AppUserDetails user,
+                                                @PathVariable Long listId) {
+        taskListService.moveToTrash(user.getId(), listId);
         return ResponseEntity.noContent().build();
     }
 
     /** 並び替え（F-24）。再採番の結果をそのまま返す。 */
     @PatchMapping("/api/lists/{listId}/move")
     @Operation(summary = "リストの並び替え", description = "並び替えたあとのボード内のリストの順番を返す")
-    public List<TaskListPositionResponse> move(@PathVariable Long listId,
+    public List<TaskListPositionResponse> move(@AuthenticationPrincipal AppUserDetails user,
+                                                   @PathVariable Long listId,
                                                @Valid @RequestBody MoveRequest request) {
-        return taskListService.move(currentUser.requireId(), listId, request.position()).stream()
+        return taskListService.move(user.getId(), listId, request.position()).stream()
                 .map(TaskListPositionResponse::from)
                 .toList();
     }

@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,16 +37,13 @@ import jakarta.validation.Valid;
 public class AuthController {
 
     private final AuthService authService;
-    private final CurrentUser currentUser;
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository;
 
     public AuthController(AuthService authService,
-                          CurrentUser currentUser,
                           AuthenticationManager authenticationManager,
                           SecurityContextRepository securityContextRepository) {
         this.authService = authService;
-        this.currentUser = currentUser;
         this.authenticationManager = authenticationManager;
         this.securityContextRepository = securityContextRepository;
     }
@@ -91,8 +89,8 @@ public class AuthController {
     /** ログイン状態の確認（F-08）。未ログインなら Security 設定により 401 が返る。 */
     @GetMapping("/me")
     @Operation(summary = "ログイン状態の確認", description = "未ログインなら 401 を返す")
-    public UserResponse me() {
-        return UserResponse.from(authService.getById(currentUser.requireId()));
+    public UserResponse me(@AuthenticationPrincipal AppUserDetails user) {
+        return UserResponse.from(authService.getById(user.getId()));
     }
 
     /**

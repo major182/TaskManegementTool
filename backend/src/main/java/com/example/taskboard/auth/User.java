@@ -2,6 +2,8 @@ package com.example.taskboard.auth;
 
 import java.time.Instant;
 
+import org.hibernate.annotations.CreationTimestamp;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -31,7 +33,8 @@ public class User {
     @Column(name = "last_opened_board_id")
     private Long lastOpenedBoardId;
 
-    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     /** JPA が使う既定コンストラクタ。 */

@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Locale;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,7 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.taskboard.auth.CurrentUser;
+import com.example.taskboard.auth.AppUserDetails;
 import com.example.taskboard.common.NotFoundException;
 import com.example.taskboard.trash.TrashDtos.RestoreResponse;
 import com.example.taskboard.trash.TrashDtos.TrashCountResponse;
@@ -32,49 +33,49 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class TrashController {
 
     private final TrashService trashService;
-    private final CurrentUser currentUser;
 
-    public TrashController(TrashService trashService, CurrentUser currentUser) {
+    public TrashController(TrashService trashService) {
         this.trashService = trashService;
-        this.currentUser = currentUser;
     }
 
     /** ゴミ箱の一覧（F-41）。削除日時の新しい順。 */
     @GetMapping
     @Operation(summary = "ゴミ箱の一覧",
             description = "ボード・リスト・カードをまとめて返す。親がゴミ箱にある子は親の1件として表示するため含まない")
-    public List<TrashItemResponse> list() {
-        return trashService.findAll(currentUser.requireId());
+    public List<TrashItemResponse> list(@AuthenticationPrincipal AppUserDetails user) {
+        return trashService.findAll(user.getId());
     }
 
     /** ゴミ箱の件数（F-41）。サイドバーに出す。 */
     @GetMapping("/count")
     @Operation(summary = "ゴミ箱の件数")
-    public TrashCountResponse count() {
-        return new TrashCountResponse(trashService.count(currentUser.requireId()));
+    public TrashCountResponse count(@AuthenticationPrincipal AppUserDetails user) {
+        return new TrashCountResponse(trashService.count(user.getId()));
     }
 
     /** 元に戻す（F-42）。リストは一番右、カードは一番下に戻る。 */
     @PostMapping("/{type}/{id}/restore")
     @Operation(summary = "元に戻す",
             description = "元の場所に戻せないときは 409。元のリストがないカードは一番左のリストに戻り、message が入る")
-    public RestoreResponse restore(@PathVariable String type, @PathVariable Long id) {
-        return trashService.restore(currentUser.requireId(), toType(type), id);
+    public RestoreResponse restore(@AuthenticationPrincipal AppUserDetails user,
+                                       @PathVariable String type, @PathVariable Long id) {
+        return trashService.restore(user.getId(), toType(type), id);
     }
 
     /** 完全に削除（F-43）。 */
     @DeleteMapping("/{type}/{id}")
     @Operation(summary = "完全に削除", description = "元に戻せない。子のデータも一緒に消える")
-    public ResponseEntity<Void> deletePermanently(@PathVariable String type, @PathVariable Long id) {
-        trashService.deletePermanently(currentUser.requireId(), toType(type), id);
+    public ResponseEntity<Void> deletePermanently(@AuthenticationPrincipal AppUserDetails user,
+                                                      @PathVariable String type, @PathVariable Long id) {
+        trashService.deletePermanently(user.getId(), toType(type), id);
         return ResponseEntity.noContent().build();
     }
 
     /** ゴミ箱を空にする（F-44）。 */
     @DeleteMapping
     @Operation(summary = "ゴミ箱を空にする", description = "元に戻せない")
-    public ResponseEntity<Void> empty() {
-        trashService.empty(currentUser.requireId());
+    public ResponseEntity<Void> empty(@AuthenticationPrincipal AppUserDetails user) {
+        trashService.empty(user.getId());
         return ResponseEntity.noContent().build();
     }
 

@@ -2,6 +2,8 @@ package com.example.taskboard.common;
 
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -20,6 +22,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /** 入力チェックのエラー（400）。項目ごとのメッセージを errors に入れる。 */
     @Override
@@ -66,5 +70,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     public ProblemDetail handleConflict(ConflictException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    /**
+     * 想定していない例外（500）。
+     * 画面には原因を出さず（内部の情報が漏れるため）、調査できるようログに残す。
+     * これが無いと応答が ProblemDetail 以外の形になり、画面のエラー処理と噛み合わない。
+     */
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleUnexpected(Exception ex) {
+        LOG.error("想定していないエラーが発生しました", ex);
+        return ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR, "エラーが発生しました。しばらくしてからお試しください");
     }
 }

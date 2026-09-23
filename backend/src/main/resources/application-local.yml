@@ -6,3 +6,10 @@ server:
       cookie:
         same-site: lax
         secure: false
+
+# 開発中は Swagger UI から API を試せるようにする（docs/04_api-design.md 6章）
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
