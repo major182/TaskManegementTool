@@ -86,3 +86,57 @@ describe('ブラウザの戻る（05 画面設計書 3章）', () => {
     expect(history.depth).toBe(1)
   })
 })
+
+describe('ログイン中のブラウザの戻る（Issue #31）', () => {
+  let history: ReturnType<typeof installFakeHistory>
+
+  const USER = { id: 1, username: 'taro_123', lastOpenedBoardId: null }
+
+  beforeEach(() => {
+    history = installFakeHistory()
+    mockApi([
+      { path: '/auth/me', body: USER },
+      { path: '/boards', body: [] },
+      { path: '/trash/count', body: { count: 0 } },
+    ])
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('メイン画面を開くと履歴に目印を積む', async () => {
+    renderWithProviders(<App />)
+
+    // サイドバーのログアウトが出ていれば、メイン画面（S-01）が出ている
+    expect(await screen.findByRole('button', { name: 'ログアウト' })).toBeInTheDocument()
+    await waitFor(() => expect(history.depth).toBe(2))
+  })
+
+  it('戻るを押してもメイン画面のまま、アプリの外へ出ない', async () => {
+    renderWithProviders(<App />)
+    expect(await screen.findByRole('button', { name: 'ログアウト' })).toBeInTheDocument()
+    await waitFor(() => expect(history.depth).toBe(2))
+
+    act(() => history.back())
+
+    // 画面が消えない（ログイン画面にも真っ白にもならない）
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'ログアウト' })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: 'ログイン' })).not.toBeInTheDocument()
+    // 目印を積み直しているので、続けて押しても外へ出ない
+    expect(history.depth).toBe(2)
+  })
+
+  it('何度戻るを押してもアプリの中に留まる', async () => {
+    renderWithProviders(<App />)
+    expect(await screen.findByRole('button', { name: 'ログアウト' })).toBeInTheDocument()
+    await waitFor(() => expect(history.depth).toBe(2))
+
+    act(() => history.back())
+    act(() => history.back())
+    act(() => history.back())
+
+    expect(screen.getByRole('button', { name: 'ログアウト' })).toBeInTheDocument()
+    expect(history.depth).toBe(2)
+  })
+})

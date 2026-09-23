@@ -33,6 +33,10 @@ server:
       # 要件 F-08：ログイン状態は30日保持（docs/02_tech-stack.md 5.1）
       timeout: 30d
       cookie:
+        # ブラウザを閉じても保持するため、Cookie 自体にも有効期限を持たせる。
+        # これが無いとセッション Cookie（ブラウザを閉じたら消える）になり、
+        # サーバー側の timeout だけでは F-08 を満たせない
+        max-age: 30d
         http-only: true
         same-site: none
         secure: true
