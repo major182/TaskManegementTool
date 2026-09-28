@@ -1,0 +1,10 @@
+# 改行コードの扱い（docs/07_deployment.md 7.3、CLAUDE.md 4章）
+#
+# Windows の Git は既定（core.autocrlf=true）で、チェックアウト時に改行を CRLF に変換する。
+# しかしシェルスクリプトは Linux 上で実行されるため、CRLF のままだと
+#   /bin/bash^M: bad interpreter
+#   $'\r': command not found
+# といったエラーで動かなくなる。
+# EC2 の初期設定スクリプト（infra/terraform/user_data.sh）が該当するため、
+# シェルスクリプトだけは必ず LF で扱うよう明示する。
+*.sh text eol=lf
