@@ -70,6 +70,56 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# ---------- プライベートサブネット（データベース用） ----------
+# 「プライベート」とは、インターネットゲートウェイへの経路を持たないサブネットのこと。
+# ここに置いたものは、インターネットから直接たどり着けない。
+#
+# 2つ作る理由：
+#   RDS は「2つ以上の AZ にまたがるサブネットの組」を必ず要求するため（rds.tf 参照）。
+#   単一 AZ で動かす場合でも同じ。片方は実際には使われないが、無いと RDS を作成できない。
+#
+# for_each で2つ作っている。count（番号）ではなく for_each（名前）を使うと、
+# 後から1つ減らしたときに、残りのサブネットが作り直されずに済む
+resource "aws_subnet" "private" {
+  for_each = {
+    a = { cidr = var.private_subnet_cidrs[0], az_index = 0 }
+    c = { cidr = var.private_subnet_cidrs[1], az_index = 1 }
+  }
+
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = each.value.cidr
+  availability_zone = data.aws_availability_zones.available.names[each.value.az_index]
+
+  # パブリック IP を割り当てない。インターネットに出る必要がないため
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.project_name}-private-subnet-${each.key}"
+  }
+}
+
+# プライベートサブネット用のルートテーブル。
+# 0.0.0.0/0 の行を「書かない」のが要点。
+# VPC 内部への経路（local）だけが自動で入り、インターネットへは出られない
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  # 空のリストを明示することで「VPC 内部への経路（local）以外は持たない」を Terraform に管理させる。
+  # 書かないと route が「管理対象外」になり、誰かが手で経路を足しても検知できない
+  route = []
+
+  tags = {
+    Name = "${var.project_name}-private-rt"
+  }
+}
+
+resource "aws_route_table_association" "private" {
+  for_each = aws_subnet.private
+
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private.id
+}
+
 # ---------- セキュリティグループ（サーバーの前に立つ関所） ----------
 # セキュリティグループは「許可リスト方式」。書いたものだけが通り、書かないものは全部拒否される。
 # また「ステートフル」なので、入りを許可すればその応答の戻りは自動的に許可される

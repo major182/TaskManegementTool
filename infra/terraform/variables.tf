@@ -26,6 +26,20 @@ variable "public_subnet_cidr" {
   default     = "10.0.1.0/24"
 }
 
+variable "private_subnet_cidrs" {
+  description = <<-EOT
+    データベースを置くプライベートサブネットのアドレス範囲を2つ。
+    RDS は2つ以上の AZ にまたがるサブネットの組を要求するため、単一 AZ 構成でも2つ必要になる。
+  EOT
+  type        = list(string)
+  default     = ["10.0.11.0/24", "10.0.12.0/24"]
+
+  validation {
+    condition     = length(var.private_subnet_cidrs) == 2
+    error_message = "private_subnet_cidrs はちょうど2つ指定してください（RDS の要件）。"
+  }
+}
+
 variable "instance_type" {
   description = <<-EOT
     EC2 のサイズ。t2.micro はメモリが 1GB しかないため、
@@ -39,6 +53,54 @@ variable "root_volume_size" {
   description = "EC2 のディスクサイズ（GB）。gp3 は $0.096/GB・月"
   type        = number
   default     = 20
+}
+
+variable "db_instance_class" {
+  description = "RDS のサイズ。db.t4g.micro は $0.025／時 ＝ 約 $18.25／月"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_engine_version" {
+  description = <<-EOT
+    PostgreSQL のバージョン。開発環境（compose.yaml）とテスト（Testcontainers）を
+    17 系で揃えているため、本番も 17 系にする。
+  EOT
+  type        = string
+  default     = "17.11"
+}
+
+variable "db_allocated_storage" {
+  description = "RDS のストレージ（GB）。gp3 は $0.138／GB・月。自動バックアップは同量まで無料"
+  type        = number
+  default     = 20
+}
+
+variable "db_backup_retention_days" {
+  description = "自動バックアップの保持日数。0 にすると自動バックアップが無効になるため 1 以上にする"
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.db_backup_retention_days >= 1
+    error_message = "自動バックアップを無効にしないでください（1 以上）。"
+  }
+}
+
+variable "db_skip_final_snapshot" {
+  description = <<-EOT
+    terraform destroy のときに最終スナップショットを取らずに削除するか。
+    学習用として、すぐ消せるよう既定は true。
+    大事なデータを入れたら false にすること。
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "db_deletion_protection" {
+  description = "true にすると terraform destroy でデータベースを消せなくなる。学習用のため既定は false"
+  type        = bool
+  default     = false
 }
 
 variable "db_password" {

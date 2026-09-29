@@ -13,7 +13,8 @@ set -euxo pipefail
 
 # ---------- 1. スワップ領域を作る ----------
 # t2.micro はメモリが 1GB しかない。
-# JVM と PostgreSQL を同時に動かすと足りなくなり、OOM Killer にプロセスを殺される。
+# データベースは RDS に分けたが、JVM とビルドツールだけでも足りなくなることがあり、
+# メモリ不足になると OOM Killer にプロセスを殺される。
 # ディスクの一部をメモリの代わりに使うスワップを 2GB 用意して余裕を持たせる
 if [ ! -f /swapfile ]; then
   dd if=/dev/zero of=/swapfile bs=1M count=2048
@@ -44,55 +45,36 @@ mkdir -p /opt/taskboard
 # 環境変数ファイル。compose.yaml から読まれる。
 # 600 にして、root 以外からは読めないようにする
 cat > /opt/taskboard/.env <<ENVFILE
-POSTGRES_DB=taskboard
-POSTGRES_USER=taskboard
-POSTGRES_PASSWORD=${db_password}
+DB_HOST=${db_host}
+DB_PORT=${db_port}
+DB_NAME=${db_name}
+DB_USER=${db_user}
+DB_PASSWORD=${db_password}
 ECR_IMAGE=${ecr_image}
 ENVFILE
 chmod 600 /opt/taskboard/.env
 
 # 本番用の compose.yaml
+# データベースは RDS に分けたため、ここで動かすのはアプリだけ
 cat > /opt/taskboard/compose.yaml <<'COMPOSEFILE'
 services:
-  db:
-    image: postgres:17
-    restart: always
-    environment:
-      POSTGRES_DB: $${POSTGRES_DB}
-      POSTGRES_USER: $${POSTGRES_USER}
-      POSTGRES_PASSWORD: $${POSTGRES_PASSWORD}
-      TZ: Asia/Tokyo
-    volumes:
-      - db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    # ポートを公開しない。アプリからは Docker 内部のネットワークで届く
-
   app:
     image: $${ECR_IMAGE}
     restart: always
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      # ホスト名 "db" は Docker Compose がサービス名から自動で解決してくれる
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/$${POSTGRES_DB}
-      SPRING_DATASOURCE_USERNAME: $${POSTGRES_USER}
-      SPRING_DATASOURCE_PASSWORD: $${POSTGRES_PASSWORD}
+      # 接続先は RDS のエンドポイント。値は .env から読まれる
+      SPRING_DATASOURCE_URL: jdbc:postgresql://$${DB_HOST}:$${DB_PORT}/$${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: $${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: $${DB_PASSWORD}
       PORT: 8080
       TZ: Asia/Tokyo
-      # メモリ 1GB に収めるための JVM 設定
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=50 -XX:+UseSerialGC"
+      # メモリ 1GB に収めるための JVM 設定。
+      # データベースが同居しなくなったぶん、割り当てを 70% まで広げている
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
     ports:
       # ホストの 80番を、コンテナの 8080番につなぐ。
       # これでブラウザから http://<IP> で届くようになる
       - "80:8080"
-
-volumes:
-  db-data:
 COMPOSEFILE
 
 # ---------- 5. ECR にログインしてアプリを起動する ----------
