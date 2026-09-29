@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 1.2（ドラフト） |
+| ドキュメント版数 | 1.3（ドラフト） |
 | 作成日 | 2026-09-27 |
 | 最終更新日 | 2026-09-29 |
 | 作成者 | （氏名） |
@@ -2751,39 +2751,88 @@ output "github_actions_role_arn" {
 terraform -chdir=infra/terraform output -raw github_actions_role_arn
 ```
 
-#### ワークフローを追加する
+#### デプロイ先の指定：ID を固定しない
 
-`.github/workflows/deploy.yml` を作ります。
+インスタンス ID を GitHub Secret に入れておく方法もありますが、**採用していません。**
+
+このプロジェクトでは `user_data.sh` を変えるたびに EC2 が作り直され、**そのつど ID が変わります。**
+固定しておくと、変えるたびにデプロイが壊れます。
+
+代わりに**タグから探します**。
+
+```bash
+aws ec2 describe-instances   --filters "Name=tag:Project,Values=taskboard" "Name=instance-state-name,Values=running"   --query "Reservations[].Instances[].InstanceId" --output text
+```
+
+見つかったのが1台でなければ、そこで失敗させます。**2台見つかったときにどちらへ送るか
+分からないまま進めるより、止まったほうが安全**だからです。
+
+#### デプロイの手順はサーバー側に置く
+
+入れ替えの手順は `/opt/taskboard/deploy.sh`（`user_data.sh` が作成）に置き、
+ワークフローからは**これを呼ぶだけ**にしています。
+
+| 利点 |
+|---|
+| ワークフローに長いコマンドを埋め込まずに済む（YAML の中の引用符で悩まない） |
+| **手動で入れ替えたいときも、同じ手順をそのまま実行できる** |
+| 手順を直したいとき、Terraform 側だけで完結する |
+
+スクリプトの中身は、ECR ログイン → `pull` → `up -d` → 古いイメージの掃除 → 死活確認です。
+**死活確認が通らなければスクリプトが失敗し、ワークフローも失敗します。**
+
+#### ワークフローの全文
+
+`.github/workflows/deploy.yml`
 
 ```yaml
-# main にマージされたら、バックエンドのイメージをビルドして ECR に送る。
-# デプロイ（EC2 への反映）は、事故を防ぐため手動で行う（9.3 の手順）。
-
-name: Deploy backend to ECR
+# CD（継続的デリバリー）：main にマージされたら、自動で本番に反映する。
+#
+# CI（ci.yml）が「壊れたコードを main に入れない」ための仕組みなのに対し、
+# こちらは「main に入ったものを確実に本番へ届ける」ための仕組み。
+#
+# 流れ：
+#   1. 画面とサーバーを1つのイメージにビルドする
+#   2. ECR に push する（latest と、コミットごとのタグの2つ）
+#   3. EC2 に「新しいイメージに入れ替えろ」と指示する
+#   4. 死活確認が通るまで待つ。通らなければこのワークフローも失敗させる
+#
+# AWS への認証はアクセスキーではなく OIDC を使う。
+# GitHub が発行する一時的な身分証を AWS が検証する方式で、
+# 永続的な鍵を GitHub に預けずに済む（infra/terraform/github_oidc.tf）。
+name: deploy
 
 on:
   push:
     branches: [main]
     paths:
-      # バックエンドに変更があったときだけ動かす（無駄なビルドをしない）
+      # 画面もサーバーも1つのイメージに入るため、どちらの変更でも動かす。
+      # ドキュメントだけの変更では動かさない（無駄なデプロイをしない）
       - 'backend/**'
       - 'frontend/**'
       - 'Dockerfile'
+      - '.dockerignore'
       - '.github/workflows/deploy.yml'
-  # 手動でも実行できるようにする
-  workflow_dispatch:
 
-# OIDC トークンを発行するために必要な権限
+# 同時に2つ走ると、どちらのイメージが反映されたか分からなくなる。
+# 後から来たものを待たせ、順番に処理する
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 permissions:
+  # OIDC の身分証を発行するために必要
   id-token: write
   contents: read
 
 env:
   AWS_REGION: ap-northeast-1
   ECR_REPOSITORY: taskboard-backend
+  # デプロイ先を探すときの目印（infra/terraform の default_tags と合わせる）
+  PROJECT_TAG: taskboard
 
 jobs:
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -2796,32 +2845,127 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: ECR にログイン
-        id: login-ecr
+        id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: ビルドして push
+      - name: イメージをビルドして push
         env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          # コミットハッシュをタグにする。どのコミットのイメージか後から分かる
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # ビルドの起点はリポジトリの直下（末尾の "."）。画面とサーバーの両方を1つのイメージに入れる。
-          # --provenance=false は ECR の脆弱性スキャンが読める形式で push するために必要
-          docker build --provenance=false --sbom=false --platform linux/amd64 \
-            -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            -t "$REGISTRY/$ECR_REPOSITORY:latest" \
+          IMAGE="$REGISTRY/$ECR_REPOSITORY"
+
+          # ビルドの起点はリポジトリの直下（末尾の "."）。画面とサーバーの両方を含めるため。
+          #
+          # --provenance=false / --sbom=false を付ける理由：
+          #   付けないと「署名情報付き」の形式で push され、ECR の脆弱性スキャンが
+          #   イメージを読めずに結果が出ない。設定はあるのに検査されない状態になる
+          #   （docs/07_deployment.md 13章）
+          docker build \
+            --provenance=false --sbom=false \
+            --platform linux/amd64 \
+            -t "$IMAGE:$IMAGE_TAG" \
+            -t "$IMAGE:latest" \
             .
-          docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+
+          # コミットごとのタグも push しておく。
+          # 不具合が出たとき、EC2 側で前のタグを指定すれば戻せる
+          docker push "$IMAGE:$IMAGE_TAG"
+          docker push "$IMAGE:latest"
+
+      - name: デプロイ先の EC2 を探す
+        id: target
+        run: |
+          # インスタンス ID を固定で持たせると、user_data を変えて EC2 が
+          # 作り直されるたびに ID が変わり、そのつどデプロイが壊れる。
+          # タグから探すことで、作り直されても追従できる
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=$PROJECT_TAG" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" \
+            --output text)
+
+          if [ -z "$INSTANCE_ID" ] || [ "$(echo "$INSTANCE_ID" | wc -w)" -ne 1 ]; then
+            echo "::error::デプロイ先が1台に定まりません（見つかった ID: '$INSTANCE_ID'）"
+            exit 1
+          fi
+
+          echo "instance-id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "デプロイ先: $INSTANCE_ID"
+
+      - name: EC2 に反映する
+        env:
+          INSTANCE_ID: ${{ steps.target.outputs.instance-id }}
+        run: |
+          # 実際の手順は EC2 側の /opt/taskboard/deploy.sh に置いてある
+          # （infra/terraform/user_data.sh が作成）。ここでは呼ぶだけ
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "deploy ${{ github.sha }}" \
+            --parameters 'commands=["bash /opt/taskboard/deploy.sh"]' \
+            --timeout-seconds 600 \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "コマンド ID: $COMMAND_ID"
+
+          # 終わるまで待つ。失敗しても wait はエラーを返すため、判定は次の行で行う
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" || true
+
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query "Status" --output text)
+
+          echo "--- 実行結果 ---"
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query "StandardOutputContent" --output text
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::デプロイに失敗しました（状態: $STATUS）"
+            aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "StandardErrorContent" --output text
+            exit 1
+          fi
+
+          echo "::notice::デプロイ成功（${{ github.sha }}）"
 ```
 
-最後に、ロール ARN を GitHub に登録します（これは秘密ではありませんが、リポジトリ間で使い回さないよう Secret にしておきます）。
+#### 最後に、ロールの ARN を GitHub に登録する
 
 ```powershell
 gh secret set AWS_ROLE_ARN --body (terraform -chdir=infra/terraform output -raw github_actions_role_arn)
 ```
 
----
+ロール ARN 自体は秘密の情報ではありませんが、リポジトリ間で使い回さないよう Secret にしています。
+
+#### ⚠️ 公開リポジトリでの注意：発火条件を間違えない
+
+このリポジトリは公開されています。**発火条件を `pull_request` にしてはいけません。**
+
+| 発火条件 | 何が起きるか |
+|---|---|
+| `push: branches: [main]`（**採用**） | マージされたコードだけが動く。マージを承認できるのは権限を持つ人だけなので安全 |
+| `pull_request` | **見知らぬ人が fork から出した PR のコードが、AWS の権限を持った状態で実行される。** 鍵を盗まれる |
+
+公開リポジトリでよく知られた攻撃経路です。**「誰でも PR を出せる」ことと
+「PR のコードが本番の権限で動く」ことを、絶対に結びつけない**でください。
+
+あわせて、OIDC ロールの権限も次のように絞っています。
+
+| 権限 | 範囲 |
+|---|---|
+| ECR への push | このリポジトリのみ |
+| EC2 を探す | 一覧を見るだけ（起動・停止・削除はできない） |
+| コマンドを送る | **`Project=taskboard` のタグが付いたインスタンスのみ** |
+| 実行できる手順書 | `AWS-RunShellScript` のみ |
 
 ## 10. 手順F：日々の運用
 
@@ -3265,6 +3409,7 @@ window.history.pushState(BOARD_HISTORY_STATE, '')
 
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 1.3 | 2026-09-29 | 自動デプロイ（CD）を導入し、9.6 を実際のワークフローの内容に書き換え。main へのマージで、ビルド → ECR への push → EC2 への反映 → 死活確認までを自動化した。デプロイ先はインスタンス ID を固定せずタグから探す（EC2 が作り直されても追従するため）。入れ替えの手順は EC2 上の `/opt/taskboard/deploy.sh` に置き、ワークフローからは呼ぶだけにした。公開リポジトリで発火条件を `pull_request` にしてはいけない理由も明記 | |
 | 1.2 | 2026-09-29 | 品質チェックの記録を13章として新設。公開リポジトリに実際の IP アドレスを書かない方針に変更し、8.6 の記録から実値を伏せた | |
 | 1.1 | 2026-09-29 | デプロイ後の品質チェックの結果を反映。7.5・7.6・7.10・7.11・7.12 のコード掲載を実ファイルの内容に差し替え（プライベートサブネット・RDS 関連の変数・DB 接続の引数などが抜けており、そのままコピーすると動かない状態だった）。9章のゴールと 9.1 の記述を実装に合わせ、9.6 の `deploy.yml` のビルド範囲を `./backend` から直下に修正。節番号の参照ずれ（8.6→8.8、9.5→9.6）を訂正。DB のパスワードをパラメータストアに移し、Docker のログ上限とヘルスチェックを追加。13章に3件の症状を追加 | |
 | 1.0 | 2026-09-29 | **アプリのデプロイを完了。** 画面（React）を jar に同梱する実装を反映し、12.3 を実際の手順に書き換え。調査の結果 **react-router は使われておらず URL が常に `/` のまま**と判明したため、「ディープリンクで 404 になる」という記述を訂正し、SPA フォールバックを実装しない理由を明記。HTTP 公開ではセッション Cookie の `Secure` / `SameSite=None` によりログインが維持できない問題と対処を 12.2 に追記。Swagger は本番で無効のため、9.4 の確認方法を `/actuator/health` と実画面に変更。9.5 にデプロイの記録と2回目以降の手順・戻し方を新設 | |
