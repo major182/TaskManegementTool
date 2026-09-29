@@ -1,6 +1,7 @@
 package com.example.taskboard.config;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -23,6 +24,7 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -36,6 +38,11 @@ import tools.jackson.databind.ObjectMapper;
 @EnableWebSecurity
 @EnableConfigurationProperties(CorsProperties.class)
 public class SecurityConfig {
+
+    /** 画面（React のビルド成果物）として jar に同梱され、認証なしで配るファイル。 */
+    private static final List<String> STATIC_PATHS = List.of(
+            "/", "/index.html", "/assets/**", "/favicon.svg", "/icons.svg");
+
 
     private final ObjectMapper objectMapper;
     private final CorsProperties corsProperties;
@@ -72,7 +79,31 @@ public class SecurityConfig {
                                 PathPatternRequestMatcher.withDefaults().matcher("/swagger-ui/**"),
                                 PathPatternRequestMatcher.withDefaults().matcher("/swagger-ui.html"))
                         .permitAll()
+                        // 画面（React のビルド成果物）は jar に同梱し、同じサーバーから配る
+                        // （docs/07_deployment.md 12章）。ログインする前に読み込まれるため、
+                        // 静的ファイルだけは認証なしで通す必要がある。
+                        // 許可しすぎないよう、実際にビルドで出力されるものだけを列挙する。
+                        //
+                        // GET だけでなく HEAD も通す。HEAD は「本文は要らないので情報だけ返して」という
+                        // 要求で、死活監視ツールやリンクチェッカーが使う。GET しか許可しないと
+                        // それらに 401 を返してしまい、動いているのに落ちていると判定される
+                        //
+                        // 画面遷移は URL を変えない方式（History API の pushState を URL 引数なしで呼ぶ）
+                        // のため、アドレスは常に "/" のまま。したがって
+                        // 「どのパスでも index.html を返す」というフォールバックは不要。
+                        // 将来 react-router を入れて URL が変わるようになったら、そのとき追加する
+                        .requestMatchers(STATIC_PATHS.stream()
+                                .flatMap(path -> Stream.of(
+                                        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, path),
+                                        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.HEAD, path)))
+                                .toArray(RequestMatcher[]::new))
+                        .permitAll()
                         .anyRequest().authenticated())
+                // Spring Security は既定ですべての応答に「保存するな」というキャッシュ指示を付ける。
+                // 認証が要るページを端末に残さないための配慮で、API にはそのまま効かせたい。
+                // ただし画面のファイル（/assets/xxx-<ハッシュ>.js など）は中身が変わると
+                // ファイル名自体が変わるため、古いものが使われる心配がない。
+                // ここだけ指示を外して、ブラウザに保存させる（毎回 300KB 以上を再取得しなくて済む）
                 // 未ログインのときはログイン画面へリダイレクトせず、401 と JSON を返す
                 .exceptionHandling(handling -> handling.authenticationEntryPoint(unauthorizedEntryPoint()))
                 .formLogin(form -> form.disable())

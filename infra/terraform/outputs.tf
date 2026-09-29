@@ -23,7 +23,7 @@ output "ecr_repository_url" {
 }
 
 output "github_actions_role_arn" {
-  description = "GitHub Actions のワークフローに設定するロール ARN（9.5 で使う）"
+  description = "GitHub Actions のワークフローに設定するロール ARN（07 デプロイ手順書 9.6 で使う）"
   value       = aws_iam_role.github_actions.arn
 }
 

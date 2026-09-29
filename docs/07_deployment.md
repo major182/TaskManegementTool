@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.9（ドラフト） |
+| ドキュメント版数 | 1.2（ドラフト） |
 | 作成日 | 2026-09-27 |
 | 最終更新日 | 2026-09-29 |
 | 作成者 | （氏名） |
@@ -416,7 +416,7 @@ Terraform は3つの状態を比べて動きます。
 `terraform.tfstate` は Terraform の生命線です。これを失うと、Terraform は「自分が何を作ったか」が分からなくなり、既存のリソースを管理できなくなります。
 
 - **Git にコミットしてはいけない**（DB のパスワードなどが平文で入ることがある）
-- 今回は学習用なので手元のファイルとして持ちますが、**チーム開発では S3 に置くのが標準**です（8.6 で解説）
+- 今回は学習用なので手元のファイルとして持ちますが、**チーム開発では S3 に置くのが標準**です（8.8 で解説）
 
 ### 2.4 なぜ「AWS CLI」と「Terraform」の両方が要るのか
 
@@ -509,7 +509,7 @@ PowerShell で確認した結果です。
 |---|---|---|---|
 | Windows 11 の PowerShell | ✅ 使用中 | すべての操作 | — |
 | Git | ✅ 導入済み | ソース管理 | — |
-| GitHub CLI (`gh`) | ✅ 導入済み | 9.5 で Secret を登録する | — |
+| GitHub CLI (`gh`) | ✅ 導入済み | 9.6 で Secret を登録する | — |
 | Docker Desktop | ✅ 導入済み・起動中（v29.8.0） | 9.2 でイメージをビルドする | — |
 | Node.js | ✅ 導入済み | フロントエンドのビルド | — |
 | winget | ✅ 使用可能 | 以下のツールの導入に使う | — |
@@ -753,7 +753,7 @@ Terraform を動かすには、その IAM ユーザーに**十分な権限**が�
 > **学習用と割り切って Administrator にし、代わりに MFA と予算アラートで守ります。**
 > 実務では、Terraform 専用の絞ったロールを使います。
 >
-> なお、9.5 で作る GitHub Actions 用のロールは**最小権限（ECR への push のみ）**にしてあります。
+> なお、9.6 で作る GitHub Actions 用のロールは**最小権限（ECR への push のみ）**にしてあります。
 > 「人が使うユーザーは広く、自動化に渡す権限は狭く」という使い分けを意識してください。
 
 ### 5.2 MFA とコンソールログインの確認（設定済み）
@@ -1000,7 +1000,7 @@ infra/terraform/
 ├── ecr.tf                   … コンテナイメージの置き場
 ├── rds.tf                   … データベース（RDS）とサブネットグループ・DB 用 SG
 ├── ec2.tf                   … サーバー本体
-├── github_oidc.tf           … GitHub Actions に ECR への push を許可する設定（9.5 で解説）
+├── github_oidc.tf           … GitHub Actions に ECR への push を許可する設定（9.6 で解説）
 ├── outputs.tf               … 作成後に表示したい値
 ├── user_data.sh             … EC2 の初回起動時に走るスクリプト
 ├── .terraform.lock.hcl      … プロバイダの版数を記録したファイル（Git に入れる）
@@ -1079,7 +1079,8 @@ provider "aws" {
 
 ```hcl
 # 外から渡す設定値の定義。
-# ここには「型」と「説明」と「既定値」だけを書き、実際の値は terraform.tfvars に書く。
+# ここには「型」「説明」「既定値」だけを書き、実際の値は terraform.tfvars に書く。
+# こうしておくと、値を変えるためにコード本体を触らずに済む。
 
 variable "project_name" {
   description = "リソース名の先頭に付ける、このプロジェクトの識別子"
@@ -1105,10 +1106,35 @@ variable "public_subnet_cidr" {
   default     = "10.0.1.0/24"
 }
 
+variable "private_subnet_cidrs" {
+  description = <<-EOT
+    データベースを置くプライベートサブネットのアドレス範囲を2つ。
+    RDS は2つ以上の AZ にまたがるサブネットの組を要求するため、単一 AZ 構成でも2つ必要になる。
+  EOT
+  type        = list(string)
+  default     = ["10.0.11.0/24", "10.0.12.0/24"]
+
+  validation {
+    condition     = length(var.private_subnet_cidrs) == 2
+    error_message = "private_subnet_cidrs はちょうど2つ指定してください（RDS の要件）。"
+  }
+}
+
 variable "instance_type" {
   description = <<-EOT
-    EC2 のサイズ。無料プランで使えるのは t3.micro など（t2.micro は対象外。1.3 参照）。
-    メモリが 1GB しかないため、user_data.sh でスワップ領域を 2GB 追加している。
+    EC2 のサイズ。メモリが 1GB しかないため、user_data.sh でスワップ領域を 2GB 追加している。
+
+    t2.micro ではなく t3.micro にしているのは、AWS の無料プラン（新方式のクレジット付与型）が
+    対象のインスタンスタイプを限定しており、t2.micro が含まれていないため。
+    t2.micro を指定すると次のエラーで作成に失敗する。
+
+      InvalidParameterCombination: The specified instance type is not eligible for Free Tier.
+
+    使える種類は次のコマンドで確認できる。
+      aws ec2 describe-instance-types --filters "Name=free-tier-eligible,Values=true"
+
+    t3.micro は t2.micro より安く（$0.0136/時 対 $0.0152/時）、メモリは同じ 1GB。
+    メモリが足りない場合は t3.small（2GB、$0.0272/時）に変更できる。
   EOT
   type        = string
   default     = "t3.micro"
@@ -1120,16 +1146,72 @@ variable "root_volume_size" {
   default     = 20
 }
 
+variable "db_instance_class" {
+  description = "RDS のサイズ。db.t4g.micro は $0.025／時 ＝ 約 $18.25／月"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "db_engine_version" {
+  description = <<-EOT
+    PostgreSQL のバージョン。開発環境（compose.yaml）とテスト（Testcontainers）を
+    17 系で揃えているため、本番も 17 系にする。
+  EOT
+  type        = string
+  default     = "17.11"
+}
+
+variable "db_allocated_storage" {
+  description = "RDS のストレージ（GB）。gp3 は $0.138／GB・月。自動バックアップは同量まで無料"
+  type        = number
+  default     = 20
+}
+
+variable "db_backup_retention_days" {
+  description = <<-EOT
+    自動バックアップの保持日数。0 にすると自動バックアップが無効になるため 1 以上にする。
+
+    既定を 1 にしているのは、AWS の無料プラン（新方式のクレジット付与型）に
+    保持日数の上限があるため。7 を指定すると次のエラーで作成に失敗する。
+
+      FreeTierRestrictionError: The specified backup retention period
+      exceeds the maximum available to free tier customers.
+
+    有料プランにアップグレードすれば、より長い保持日数を指定できる。
+  EOT
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.db_backup_retention_days >= 1
+    error_message = "自動バックアップを無効にしないでください（1 以上）。"
+  }
+}
+
+variable "db_skip_final_snapshot" {
+  description = <<-EOT
+    terraform destroy のときに最終スナップショットを取らずに削除するか。
+    学習用として、すぐ消せるよう既定は true。
+    大事なデータを入れたら false にすること。
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "db_deletion_protection" {
+  description = "true にすると terraform destroy でデータベースを消せなくなる。学習用のため既定は false"
+  type        = bool
+  default     = false
+}
+
 variable "db_password" {
   description = "PostgreSQL の taskboard ユーザーのパスワード"
   type        = string
 
-  # sensitive = true にすると、plan / apply の出力でこの値が伏せ字になる。
+  # sensitive = true にすると、plan / apply の出力でこの値が伏せ字（sensitive value）になる。
   # ログやスクリーンショットからの漏洩を防ぐため、秘密の値には必ず付ける
   sensitive = true
 
-  # validation を書いておくと、短すぎるパスワードを plan の時点ではじける。
-  # Bean Validation で入力チェックを書くのと同じ発想
   validation {
     condition     = length(var.db_password) >= 16
     error_message = "db_password は16文字以上にしてください。"
@@ -1139,24 +1221,44 @@ variable "db_password" {
 variable "allowed_app_cidr" {
   description = <<-EOT
     アプリ（80番・443番）へのアクセスを許可する送信元のリスト。
-    課題の指示により、インターネット全体には公開せず、作業する PC からだけ届くようにする。
+    スクール課題のため、インターネット全体には公開せず、作業する PC からだけ届くようにする。
 
     既定は空リスト。空のままだと 80番・443番は誰にも開かない（安全側に倒している）。
     値は terraform.tfvars に書く。tfvars は .gitignore で除外されているため、
     自分のグローバル IP アドレスが GitHub に載ることはない。
+
+    書き方の例：["203.0.113.10/32"]
+      /32 は「この1つのアドレスだけ」という意味。
+
+    ★ 契約している回線のグローバル IP は、多くの場合ときどき変わる。
+      つながらなくなったら、まず現在の IP を調べ直して terraform apply をやり直すこと
+      （調べ方は docs/07_deployment.md 7.14）。
   EOT
   type        = list(string)
   default     = []
+
+  validation {
+    # "/" が入っていない（= /32 などを書き忘れた）指定をはじく。
+    # 例："203.0.113.10" と書くと AWS 側でエラーになるため、ここで先に気づけるようにする
+    condition     = alltrue([for c in var.allowed_app_cidr : can(regex("/", c))])
+    error_message = "allowed_app_cidr は CIDR 表記で書いてください（例：203.0.113.10/32）。"
+  }
 }
 
 variable "allowed_ssh_cidr" {
   description = <<-EOT
     SSH（22番ポート）を許可する送信元。
-    既定は 0.0.0.0/0（全世界）ではなく空リスト＝誰にも開けない。
+    既定は空リスト＝誰にも開けない。
     EC2 への接続は SSM Session Manager を使うため、22番を開ける必要がない。
   EOT
   type        = list(string)
   default     = []
+}
+
+variable "github_repository" {
+  description = "GitHub Actions から ECR へ push させるリポジトリ（オーナー名/リポジトリ名）"
+  type        = string
+  default     = "major182/TaskManegementTool"
 }
 ```
 
@@ -1164,13 +1266,13 @@ variable "allowed_ssh_cidr" {
 
 ```hcl
 # ネットワークの箱を作る。
-# 「家を建てる」で言えば、土地を用意し、道路につなげ、玄関に鍵を付ける工程にあたる。
+# 家を建てるのに例えると、土地を用意し、道路につなげ、玄関に鍵を付ける工程にあたる。
 
 # ---------- VPC（自分専用のネットワーク空間） ----------
 resource "aws_vpc" "main" {
   cidr_block = var.vpc_cidr
 
-  # VPC 内のリソースに DNS 名（ec2-xx-xx.compute.amazonaws.com のような名前）を割り当てる。
+  # VPC 内のリソースに DNS 名を割り当てる。
   # ECR からイメージを取得するときに名前解決が必要になるため、両方 true にする
   enable_dns_support   = true
   enable_dns_hostnames = true
@@ -1199,7 +1301,7 @@ data "aws_availability_zones" "available" {
 
 # ---------- パブリックサブネット ----------
 # 「パブリック」とは、インターネットゲートウェイへの経路を持つサブネットのこと。
-# サブネット自体に public/private という設定項目があるわけではなく、
+# サブネット自体に public / private という設定項目があるわけではなく、
 # ルートテーブルの中身で決まる（初学者が必ず混乱するところ）
 resource "aws_subnet" "public" {
   vpc_id            = aws_vpc.main.id
@@ -1235,13 +1337,63 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# ---------- プライベートサブネット（データベース用） ----------
+# 「プライベート」とは、インターネットゲートウェイへの経路を持たないサブネットのこと。
+# ここに置いたものは、インターネットから直接たどり着けない。
+#
+# 2つ作る理由：
+#   RDS は「2つ以上の AZ にまたがるサブネットの組」を必ず要求するため（rds.tf 参照）。
+#   単一 AZ で動かす場合でも同じ。片方は実際には使われないが、無いと RDS を作成できない。
+#
+# for_each で2つ作っている。count（番号）ではなく for_each（名前）を使うと、
+# 後から1つ減らしたときに、残りのサブネットが作り直されずに済む
+resource "aws_subnet" "private" {
+  for_each = {
+    a = { cidr = var.private_subnet_cidrs[0], az_index = 0 }
+    c = { cidr = var.private_subnet_cidrs[1], az_index = 1 }
+  }
+
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = each.value.cidr
+  availability_zone = data.aws_availability_zones.available.names[each.value.az_index]
+
+  # パブリック IP を割り当てない。インターネットに出る必要がないため
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "${var.project_name}-private-subnet-${each.key}"
+  }
+}
+
+# プライベートサブネット用のルートテーブル。
+# 0.0.0.0/0 の行を「書かない」のが要点。
+# VPC 内部への経路（local）だけが自動で入り、インターネットへは出られない
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+
+  # 空のリストを明示することで「VPC 内部への経路（local）以外は持たない」を Terraform に管理させる。
+  # 書かないと route が「管理対象外」になり、誰かが手で経路を足しても検知できない
+  route = []
+
+  tags = {
+    Name = "${var.project_name}-private-rt"
+  }
+}
+
+resource "aws_route_table_association" "private" {
+  for_each = aws_subnet.private
+
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private.id
+}
+
 # ---------- セキュリティグループ（サーバーの前に立つ関所） ----------
 # セキュリティグループは「許可リスト方式」。書いたものだけが通り、書かないものは全部拒否される。
-# また「ステートフル」なので、入りを許可すれば、その応答の戻りは自動的に許可される
+# また「ステートフル」なので、入りを許可すればその応答の戻りは自動的に許可される
 # （戻り用のルールを書く必要はない）
 resource "aws_security_group" "app" {
   name        = "${var.project_name}-app-sg"
-  description = "アプリケーションサーバー用。HTTP/HTTPS のみ受け付ける"
+  description = "Application server: allow HTTP/HTTPS from allowed addresses only"
   vpc_id      = aws_vpc.main.id
 
   tags = {
@@ -1252,52 +1404,60 @@ resource "aws_security_group" "app" {
 # インバウンド（入ってくる通信）：HTTP
 #
 # 0.0.0.0/0（全世界）ではなく、var.allowed_app_cidr に書いた送信元だけに許可する。
-# for_each に空のリストを渡すとルールが1つも作られないため、
-# allowed_app_cidr を設定しない限り 80番は誰にも開かない
+# スクール課題のため一般公開する必要がなく、公開範囲を狭めるほど攻撃されにくくなるため。
+#
+# for_each に空のリストを渡すとルールが1つも作られない。
+# つまり allowed_app_cidr を設定しない限り、80番は誰にも開かない
 resource "aws_vpc_security_group_ingress_rule" "http" {
   for_each = toset(var.allowed_app_cidr)
 
   security_group_id = aws_security_group.app.id
-  description       = "許可した送信元からの HTTP"
+  description       = "HTTP from an allowed address"
   cidr_ipv4         = each.value
   from_port         = 80
   to_port           = 80
   ip_protocol       = "tcp"
 }
 
-# インバウンド：HTTPS（許可する送信元は HTTP と同じ）
+# インバウンド：HTTPS（後で Let's Encrypt などを入れるとき用。許可する送信元は HTTP と同じ）
 resource "aws_vpc_security_group_ingress_rule" "https" {
   for_each = toset(var.allowed_app_cidr)
 
   security_group_id = aws_security_group.app.id
-  description       = "許可した送信元からの HTTPS"
+  description       = "HTTPS from an allowed address"
   cidr_ipv4         = each.value
   from_port         = 443
   to_port           = 443
   ip_protocol       = "tcp"
 }
 
-# インバウンド：SSH（既定では var.allowed_ssh_cidr が空なので、1つも作られない）
-# for_each に空リストを渡すと、このリソースは作られない。これが Terraform での条件分岐の書き方
+# インバウンド：SSH
+# 既定では var.allowed_ssh_cidr が空リストなので、このルールは1つも作られない。
+# for_each に空のコレクションを渡すとリソースが作られない ―― これが Terraform での条件分岐の書き方
 resource "aws_vpc_security_group_ingress_rule" "ssh" {
   for_each = toset(var.allowed_ssh_cidr)
 
   security_group_id = aws_security_group.app.id
-  description       = "SSH（自分の IP からのみ）"
+  description       = "SSH from a specific address"
   cidr_ipv4         = each.value
   from_port         = 22
   to_port           = 22
   ip_protocol       = "tcp"
 }
 
-# アウトバウンド（出ていく通信）：すべて許可
-# ECR からのイメージ取得、OS のパッケージ更新に必要
+# アウトバウンド（出ていく通信）：すべて許可。
+# ECR からのイメージ取得、OS のパッケージ更新、SSM への接続に必要
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.app.id
-  description       = "すべての送信を許可"
+  description       = "Allow all outbound traffic"
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1" # -1 は「すべてのプロトコル」
 }
+
+# 注意：このセキュリティグループには PostgreSQL の 5432 番ポートを開けていない。
+# データベースは RDS として別に置き、DB 用のセキュリティグループ（rds.tf）で
+# 「アプリのセキュリティグループからのみ」許可している。
+# DB のポートをインターネットに開けるのは重大な脆弱性になる
 ```
 
 > **注意：PostgreSQL の 5432 番ポートは開けていません。**
@@ -1491,7 +1651,7 @@ EC2 が**初回起動したときに1回だけ** root 権限で実行される�
 set -euxo pipefail
 
 # ---------- 1. スワップ領域を作る ----------
-# t3.micro はメモリが 1GB しかない。
+# t2.micro はメモリが 1GB しかない。
 # データベースは RDS に分けたが、JVM とビルドツールだけでも足りなくなることがあり、
 # メモリ不足になると OOM Killer にプロセスを殺される。
 # ディスクの一部をメモリの代わりに使うスワップを 2GB 用意して余裕を持たせる
@@ -1506,6 +1666,20 @@ fi
 # ---------- 2. Docker を入れて起動する ----------
 dnf update -y
 dnf install -y docker
+
+# ログを放っておくと際限なく増え、20GB のディスクが埋まって docker pull が失敗する。
+# 1ファイル 10MB × 3世代（最大 30MB）で古いものから捨てる設定を、起動前に入れておく
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<'DAEMONFILE'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DAEMONFILE
+
 systemctl enable --now docker
 
 # ec2-user が sudo なしで docker を使えるようにする
@@ -1521,14 +1695,29 @@ chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 # ---------- 4. アプリの置き場と設定ファイルを作る ----------
 mkdir -p /opt/taskboard
 
+# パスワードはパラメータストアから取りに行く。
+# 起動スクリプトに直接書くと、describe-instance-attribute で誰でも読めてしまうため
+# （理由は rds.tf のコメント）。ここは EC2 に付けた権限（iam.tf）で取得できる
+DB_PASSWORD_VALUE=$(aws ssm get-parameter   --name "${db_password_parameter}"   --with-decryption   --region ${aws_region}   --query "Parameter.Value"   --output text)
+
 # 環境変数ファイル。compose.yaml から読まれる。
 # 600 にして、root 以外からは読めないようにする
 cat > /opt/taskboard/.env <<ENVFILE
+# 接続先の部品。psql で直接つなぐときにも使うため個別に持っておく
 DB_HOST=${db_host}
 DB_PORT=${db_port}
 DB_NAME=${db_name}
-DB_USER=${db_user}
-DB_PASSWORD=${db_password}
+
+# ここから下はアプリ（application.yml）がそのまま読む名前に合わせている
+DB_URL=jdbc:postgresql://${db_host}:${db_port}/${db_name}
+DB_USERNAME=${db_user}
+DB_PASSWORD=$DB_PASSWORD_VALUE
+
+# HTTPS ではないため、Secure 属性を付けない。
+# 付けるとブラウザがセッション Cookie を保存せず、ログインが維持できない。
+# HTTPS にしたら true に戻すこと（docs/07_deployment.md 12.2）
+SESSION_COOKIE_SECURE=false
+
 ECR_IMAGE=${ecr_image}
 ENVFILE
 chmod 600 /opt/taskboard/.env
@@ -1540,11 +1729,23 @@ services:
   app:
     image: $${ECR_IMAGE}
     restart: always
+    # 死活確認。起動に失敗したときだけでなく、応答しなくなったときも気づけるようにする。
+    # restart: always は「落ちたとき」しか効かないため、これが無いと固まったまま放置される
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # 起動には20秒ほどかかる。その間の失敗は数えない
+      start_period: 60s
     environment:
-      # 接続先は RDS のエンドポイント。値は .env から読まれる
-      SPRING_DATASOURCE_URL: jdbc:postgresql://$${DB_HOST}:$${DB_PORT}/$${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: $${DB_USER}
-      SPRING_DATASOURCE_PASSWORD: $${DB_PASSWORD}
+      # 接続先は RDS のエンドポイント。値は .env から読まれる。
+      # 変数名は application.yml が読むものに合わせてある
+      DB_URL: $${DB_URL}
+      DB_USERNAME: $${DB_USERNAME}
+      DB_PASSWORD: $${DB_PASSWORD}
+      # HTTP で公開するため、セッション Cookie の Secure 属性を外す
+      SESSION_COOKIE_SECURE: $${SESSION_COOKIE_SECURE}
       PORT: 8080
       TZ: Asia/Tokyo
       # メモリ 1GB に収めるための JVM 設定。
@@ -1621,18 +1822,27 @@ resource "aws_instance" "app" {
 
   # 初回起動時に実行するスクリプト。user_data.sh のテンプレートに値を埋め込む
   user_data = templatefile("${path.module}/user_data.sh", {
-    db_password  = var.db_password
-    aws_region   = var.aws_region
-    ecr_registry = split("/", aws_ecr_repository.backend.repository_url)[0]
-    ecr_image    = "${aws_ecr_repository.backend.repository_url}:latest"
+    # 接続先は RDS のエンドポイント。
+    # aws_db_instance を参照しているため、Terraform は「RDS を作ってから EC2 を作る」
+    # 順番を自動で判断する
+    db_host = aws_db_instance.main.address
+    db_port = aws_db_instance.main.port
+    db_name = aws_db_instance.main.db_name
+    db_user = aws_db_instance.main.username
+    # パスワードそのものは渡さない。取りに行く先だけを渡す（rds.tf のコメント参照）
+    db_password_parameter = aws_ssm_parameter.db_password.name
+    aws_region            = var.aws_region
+    ecr_registry          = split("/", aws_ecr_repository.backend.repository_url)[0]
+    ecr_image             = "${aws_ecr_repository.backend.repository_url}:latest"
   })
 
   # user_data を変更したらインスタンスを作り直す。
-  # user_data は初回起動時にしか走らないため、これが無いと変更が反映されない
+  # user_data は初回起動時にしか走らないため、これが無いと変更が反映されない。
+  # ただし作り直すと DB のデータは消えるので、plan に -/+ が出たら必ず内容を確認すること
   user_data_replace_on_change = true
 
   root_block_device {
-    volume_size = var.root_volume_size # 既定 20GB。$0.096／GB・月 なので約 $1.92／月
+    volume_size = var.root_volume_size
     volume_type = "gp3" # 最新世代。gp2 より安く速い
     encrypted   = true  # ディスクを暗号化する。無料。付けない理由がない
   }
@@ -1650,7 +1860,10 @@ resource "aws_instance" "app" {
 }
 
 # ---------- Elastic IP（固定のグローバル IP） ----------
-# これが無いと、EC2 を停止・起動するたびに IP アドレスが変わってしまう
+# これが無いと、EC2 を停止・起動するたびに IP アドレスが変わってしまう。
+#
+# 注意：Elastic IP は「確保しているだけで課金」される（$0.005／時 ＝ 約 $3.65／月）。
+# EC2 を停止しても止まらないため、長く使わないときは terraform destroy で消すこと
 resource "aws_eip" "app" {
   instance = aws_instance.app.id
   domain   = "vpc"
@@ -1673,7 +1886,8 @@ resource "aws_eip" "app" {
 
 ```hcl
 # apply の後に画面に表示される値。
-# 「作ったサーバーの IP はいくつ？」を調べるためにコンソールを開かなくて済む
+# 「作ったサーバーの IP はいくつ？」を調べるためにコンソールを開かなくて済む。
+# あとから見たいときは terraform output で再表示できる。
 
 output "app_public_ip" {
   description = "アプリケーションサーバーのパブリック IP アドレス"
@@ -1695,9 +1909,19 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.backend.repository_url
 }
 
+output "github_actions_role_arn" {
+  description = "GitHub Actions のワークフローに設定するロール ARN（07 デプロイ手順書 9.6 で使う）"
+  value       = aws_iam_role.github_actions.arn
+}
+
 output "ssm_connect_command" {
   description = "サーバーのシェルに入るコマンド"
   value       = "aws ssm start-session --target ${aws_instance.app.id} --region ${var.aws_region}"
+}
+
+output "db_endpoint" {
+  description = "RDS のエンドポイント（EC2 の中からのみ接続できる）"
+  value       = aws_db_instance.main.endpoint
 }
 ```
 
@@ -2121,9 +2345,14 @@ Test-NetConnection -ComputerName (terraform -chdir=infra/terraform output -raw d
 |---|---|
 | VPC | `10.0.0.0/16` |
 | EC2 | `t3.micro` / Amazon Linux 2023 |
-| Elastic IP | `52.197.115.225` |
+| Elastic IP | `terraform output app_public_ip` で確認する |
 | RDS | `taskboard-db` / PostgreSQL 17.11 / db.t4g.micro |
-| RDS のプライベート IP | `10.0.11.96` |
+| RDS のプライベート IP | VPC 内のアドレス（`10.0.11.0/24` の範囲） |
+
+> **このリポジトリは公開されているため、実際の IP アドレスやエンドポイントは書きません。**
+> アクセス元は自分の IP に限定しているので直ちに問題にはなりませんが、
+> 攻撃者に「どこを狙えばよいか」を教える情報を、わざわざ公開の場に置く必要はありません。
+> 必要な値は `terraform output` でいつでも確認できます。
 
 #### 所要時間
 
@@ -2179,7 +2408,7 @@ Test-NetConnection -ComputerName (terraform -chdir=infra/terraform output -raw d
 | **EC2 から** 5432番に到達できる | ✅ |
 | **EC2 から** `psql` で接続し `SELECT version()` が返る | ✅ |
 | テーブル一覧が空（Flyway 未実行のため） | ✅ |
-| **手元の PC から**の名前解決 → `10.0.11.96`（プライベート IP） | ✅ |
+| **手元の PC から**の名前解決 → VPC 内のプライベート IP（グローバル IP ではない） | ✅ |
 | **手元の PC から**の 5432番接続 → `TcpTestSucceeded: False` | ✅ |
 
 > **`psql` の `dt` が `Did not find any relations.` を返すのは正常です。**
@@ -2234,12 +2463,14 @@ aws s3api put-bucket-versioning --bucket "taskboard-tfstate-$accountId" --versio
 ## 9. 手順E：アプリをデプロイする
 
 > **この章のゴール**
-> - ブラウザで `http://＜IP＞/swagger-ui.html` を開くと Swagger UI が表示される
+> - ブラウザで `http://＜IP＞` を開くとログイン画面が表示される
+> - `/actuator/health` が `{"status":"UP"}` を返す
 
 ### 9.1 なぜ EC2 上でビルドしないのか
 
-`backend/Dockerfile` は Gradle でビルドする2段構えになっています。
+リポジトリ直下の `Dockerfile` は、画面をビルドしてから jar を作る3段構えになっています。
 しかし **t3.micro（メモリ 1GB）では Gradle のビルドがメモリ不足で失敗します。**
+画面（React）のビルドも同じイメージの中で行うため、なおさらです。
 
 そこで、**ビルドは GitHub Actions（無料）で行い、出来上がったイメージだけを ECR 経由で EC2 に届けます。**
 これは実務でも標準的な形（ビルドと実行の分離）です。
@@ -2269,15 +2500,25 @@ echo $ecrUrl
 # 2. Docker を ECR にログインさせる
 aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin $registry
 
-# 3. イメージをビルドする（backend フォルダを対象にする）
+# 3. イメージをビルドする
+#    ★リポジトリ直下（末尾の ".")で実行する。画面とサーバーの両方をビルド範囲に含めるため
 #    --platform を指定する理由：EC2 は x86_64。Windows の Docker も既定で x86_64 だが、明示しておくと安全
-docker build --platform linux/amd64 -t "${ecrUrl}:latest" ./backend
+docker build --provenance=false --sbom=false --platform linux/amd64 -t "${ecrUrl}:latest" .
 
-# 4. ECR に送る
+# 4. 戻せるように、コミット単位のタグも付けておく
+$sha = (git rev-parse --short HEAD)
+docker tag "${ecrUrl}:latest" "${ecrUrl}:${sha}"
+
+# 5. ECR に送る
 docker push "${ecrUrl}:latest"
+docker push "${ecrUrl}:${sha}"
 ```
 
-ビルドには5〜10分かかります（Gradle の依存ダウンロードのため）。
+ビルドには5〜10分かかります（npm と Gradle の依存ダウンロードのため）。2回目以降はキャッシュが効いて速くなります。
+
+> **`latest` だけでなくコミット単位のタグも push する理由**は、**戻せるようにするため**です。
+> デプロイ後に不具合が見つかったら、EC2 の `/opt/taskboard/.env` の `ECR_IMAGE` を
+> 前のコミットのタグに書き換えて `docker compose up -d` すれば、以前の状態に戻せます。
 
 ### 9.3 EC2 に新しいイメージを取り込ませる
 
@@ -2306,12 +2547,18 @@ Flyway がテーブルを自動で作るログも見えるはずです。
 terraform -chdir=infra/terraform output -raw app_url
 ```
 
-表示された URL に `/swagger-ui.html` を付けてブラウザで開きます。
-Swagger UI が表示されれば、**デプロイ成功です。**
+**まず死活確認から**行います。画面より先に、サーバーが起きているかを確かめます。
 
+```powershell
+curl.exe http://＜IP＞/actuator/health
+# {"status":"UP"} が返れば、アプリは起動している
 ```
-http://54.xxx.xxx.xxx/swagger-ui.html
-```
+
+次にブラウザで URL をそのまま開きます。**ログイン画面が表示されれば、デプロイ成功です。**
+
+> **Swagger UI は本番では開きません。**
+> [04 API設計書](04_api-design.md) 6章の方針により、`springdoc` は `local` プロファイルでのみ
+> 有効にしてあります。`/swagger-ui.html` は 404 になりますが、**これは正常です。**
 
 > **開けないときは、まずアクセス元を疑ってください。**
 > 7.14 のとおり、`terraform.tfvars` に書いた IP からしか届きません。
@@ -2334,7 +2581,72 @@ free -h
 sudo docker stats --no-stream
 ```
 
-### 9.5 GitHub Actions で自動化する
+### 9.5 デプロイの記録（2026-09-29）
+
+初回デプロイの結果です。
+
+| 段階 | 結果 |
+|---|---|
+| ローカルで `./gradlew check` | ✅ 成功 |
+| ローカルで `npm run check`（テスト147件） | ✅ 成功 |
+| `docker build`（3段構成） | ✅ 成功。イメージ 63MB |
+| jar に画面が入っているか | ✅ `BOOT-INF/classes/static/` に index.html・assets・svg |
+| ローカル起動 → `/` が 200/html | ✅ |
+| ローカル起動 → `/api/*` が未ログインで 401 | ✅ |
+| ローカルでログイン → 再アクセス | ✅ `SameSite=Lax`・`Secure` なし |
+| ECR に push | ✅ `latest` と コミット短縮 SHA の2タグ |
+| EC2 で起動 | ✅ `Started TaskboardApplication in 16.779 seconds` |
+| Flyway | ✅ V1・V2 が `success = t`。テーブル5つ作成 |
+| アプリのエラーログ | ✅ 0件 |
+| 本番で新規登録 → ログイン → ボード作成 | ✅ すべて 2xx |
+
+> **EC2 を作り直した直後、イメージが ECR にあれば初期設定スクリプトが自動で起動します。**
+> `user_data.sh` の最後で `docker compose pull && up -d` を実行しているためです。
+> 今回は EC2 の初期設定中に push が終わっていたため、手動の `docker compose pull` は不要でした。
+
+#### 2回目以降のデプロイ手順
+
+コードを直したら、次の2ステップで反映できます。
+
+```powershell
+# 1. ビルドして push（リポジトリ直下で実行）
+$ecrUrl = (terraform -chdir=infra/terraform output -raw ecr_repository_url)
+$registry = $ecrUrl.Split("/")[0]
+$sha = (git rev-parse --short HEAD)
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin $registry
+docker build --provenance=false --sbom=false --platform linux/amd64 -t "${ecrUrl}:latest" -t "${ecrUrl}:${sha}" .
+docker push "${ecrUrl}:latest"
+docker push "${ecrUrl}:${sha}"
+```
+
+```powershell
+# 2. EC2 に反映（対話シェルを使わず、コマンドを送り込む）
+$iid = (terraform -chdir=infra/terraform output -raw instance_id)
+$cmd = aws ssm send-command --instance-ids $iid --region ap-northeast-1 `
+  --document-name "AWS-RunShellScript" `
+  --parameters 'commands=["cd /opt/taskboard","aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin $(grep ECR_IMAGE .env | cut -d= -f2 | cut -d/ -f1)","docker compose pull","docker compose up -d","docker image prune -f","sleep 20","curl -sf http://localhost:80/actuator/health"]' `
+  --query "Command.CommandId" --output text
+
+aws ssm get-command-invocation --command-id $cmd --instance-id $iid --region ap-northeast-1 `
+  --query "{Status:Status,Out:StandardOutputContent}"
+```
+
+`docker image prune -f` を入れているのは、**古いイメージでディスクが埋まるのを防ぐ**ためです。
+t3.micro のディスクは 20GB で、イメージ1つが約 300MB あります。
+
+#### 動かなくなったときの戻し方
+
+コミット単位のタグを push してあるので、**前の状態に戻せます。**
+
+```bash
+# EC2 の中で、使うイメージを前のタグに書き換える
+sudo sed -i "s|taskboard-backend:latest|taskboard-backend:＜戻したいSHA＞|" /opt/taskboard/.env
+cd /opt/taskboard && sudo docker compose up -d
+```
+
+---
+
+### 9.6 GitHub Actions で自動化する
 
 手順が通ったら、`main` にマージされたときに自動で ECR へ push されるようにします。
 
@@ -2455,6 +2767,8 @@ on:
     paths:
       # バックエンドに変更があったときだけ動かす（無駄なビルドをしない）
       - 'backend/**'
+      - 'frontend/**'
+      - 'Dockerfile'
       - '.github/workflows/deploy.yml'
   # 手動でも実行できるようにする
   workflow_dispatch:
@@ -2491,10 +2805,12 @@ jobs:
           # コミットハッシュをタグにする。どのコミットのイメージか後から分かる
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build --platform linux/amd64 \
+          # ビルドの起点はリポジトリの直下（末尾の "."）。画面とサーバーの両方を1つのイメージに入れる。
+          # --provenance=false は ECR の脆弱性スキャンが読める形式で push するために必要
+          docker build --provenance=false --sbom=false --platform linux/amd64 \
             -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
             -t "$REGISTRY/$ECR_REPOSITORY:latest" \
-            ./backend
+            .
           docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           docker push "$REGISTRY/$ECR_REPOSITORY:latest"
 ```
@@ -2735,9 +3051,33 @@ Issue #48 はこれで決着です。
 
 | 諦めること | 影響 |
 |---|---|
-| **HTTPS にできない** | EC2 に直接 HTTP でつなぐため、セッション Cookie の `Secure` 属性が働かない。学習用かつアクセス元を自分の IP に限定しているため、今回は許容する |
+| **HTTPS にできない** | 通信が暗号化されない。学習用かつアクセス元を自分の IP に限定しているため、今回は許容する |
 | CDN による高速化 | 利用者が自分だけなので影響はない |
 | 画面だけの更新でもバックエンドを再デプロイ | イメージを作り直して push し直す必要がある |
+
+#### ⚠️ HTTPS でないと、設定を変えないとログインできません
+
+[02 技術選定書 5.1](02_tech-stack.md) の決定にしたがい、セッション Cookie には
+`Secure`（HTTPS でのみ送る）と `SameSite=None`（別サイトからでも送る）が付いていました。
+**この設定のままでは HTTP 公開でログインが維持できません。**
+
+| 属性 | 何が起きるか |
+|---|---|
+| `Secure` | ブラウザが **HTTPS でない通信では Cookie を保存も送信もしない**。ログインは成功するが、次のリクエストで 401 になる |
+| `SameSite=None` | そもそも **`Secure` とセットでないとブラウザに拒否される** |
+
+そこで `application.yml` を環境変数で切り替えられるようにしました。
+
+```yaml
+        same-site: ${SESSION_COOKIE_SAME_SITE:lax}
+        secure: ${SESSION_COOKIE_SECURE:true}
+```
+
+**既定値は安全側（`secure: true`）のまま**にし、EC2 側の `.env` で `SESSION_COOKIE_SECURE=false` を渡しています。
+設定を忘れた環境が勝手に緩くなることはありません。**HTTPS 化したら、この環境変数を外すだけで元に戻ります。**
+
+なお `SameSite` を `lax` にできるのは、**画面と API を同じサーバーから配るようになったため**です。
+`None` が必要だったのは、画面を別ドメインに置く前提だったときの名残です。
 
 将来 B に移行したくなった場合、**インフラ側の変更は「S3 ＋ CloudFront を足す」ことと、
 セキュリティグループの許可元を CloudFront に変えること**の2つです。
@@ -2749,26 +3089,99 @@ Issue #48 はこれで決着です。
 > そのときは許可する送信元を「自分の IP」から「CloudFront からの通信のみ」に切り替えます
 > （`com.amazonaws.global.cloudfront.origin-facing` という AWS 管理のプレフィックスリストを使います）。
 
-### 12.3 実現方法（段階④で実施）
+### 12.3 実現方法
 
-インフラには影響しないため、**アプリのデプロイ（9章）と同じタイミング**で対応します。
-具体的な作業は次のとおりで、これは別の Issue として扱います。
+**インフラには影響しません。** Terraform の変更は不要で、アプリ側の作りを変えるだけです。
 
-| やること | 内容 |
+#### やったこと
+
+| やること | 実際の対応 |
 |---|---|
-| フロントエンドをビルドする | `frontend/` で `npm run build` → `dist/` ができる |
-| Spring Boot に入れる | `dist/` の中身を `backend/src/main/resources/static/` に配置する |
-| 画面を返す経路を用意する | React Router を使うため、`/api/**` 以外のパスは `index.html` を返すようにする |
-| `Dockerfile` を直す | 1段目でフロントエンドもビルドするか、CI で作った `dist` を受け取る |
-| Spring Security の設定 | 静的ファイル（`/`、`/assets/**`）は認証なしで返す |
+| 画面をビルドする | `Dockerfile` の1段目（`node:24-alpine`）で `npm run build` を実行する |
+| Spring Boot に入れる | 2段目で `dist/` を `src/main/resources/static/` にコピーする。ここに置いたものは jar の中から `/` で配信される |
+| 静的ファイルを認証なしで通す | `SecurityConfig` の許可リストに `/`・`/index.html`・`/assets/**`・`/favicon.svg`・`/icons.svg` を追加する |
+| Cookie の設定 | 12.2 のとおり `SESSION_COOKIE_SECURE=false` を渡す |
 
-> **注意：React Router を使っているため、`/boards/123` のような URL を直接開くと
-> Spring Boot が 404 を返します。** サーバー側に該当するパスが無いためです。
-> `/api/**` 以外は `index.html` を返す設定が必要になります。初見で必ずつまずく箇所です。
+**`Dockerfile` はリポジトリ直下に置いています。** 画面とサーバーの両方をビルド範囲に含める必要があるためです
+（`backend/` の中に置くと `frontend/` が見えません）。ビルドもリポジトリ直下で実行します。
+
+```powershell
+docker build --provenance=false --sbom=false -t taskboard-backend .
+```
+
+> **`.dockerignore` で `infra/` を必ず除外してください。**
+> `infra/terraform/terraform.tfstate` には **RDS のパスワードが平文で入っています。**
+> ビルド範囲に含めると、イメージの履歴から読み取れてしまう可能性があります。
+
+#### ⚠️ SPA フォールバックは実装していません
+
+多くの解説記事には「React の SPA を配信するときは、どのパスでも `index.html` を返す設定が必要」と書かれています。
+**このプロジェクトでは不要です。**
+
+理由は、画面遷移が **URL を変えない方式**で作られているためです。
+`frontend/src/App.tsx` は History API を次のように呼んでいます。
+
+```ts
+window.history.pushState(BOARD_HISTORY_STATE, '')
+```
+
+**第3引数（URL）を省略しています。** このとき仕様上アドレスは変わらないため、
+ブラウザの URL は常に `/` のままです。再読み込みしても、ブックマークしても、
+リンクを共有しても `/` に届き、`index.html` がそのまま返ります。
+
+むしろフォールバックを入れると、**`/api` の打ち間違いによる 404 まで `index.html` にすり替えてしまいます。**
+画面側は JSON（problem+json）が返る前提でエラーを処理しているため、有害です。
+
+> 将来 react-router を導入して URL が `/` 以外にもなったときは、そのとき追加します。
+> その場合の最小の実装は、**ドットを含まない1階層のパスだけ**を転送するものになります
+> （`/api/...` や `/assets/x.js` を巻き込まないため）。
 
 ---
 
-## 13. つまずきポイント早見表
+## 13. 品質チェックの記録（2026-09-29）
+
+デプロイが動いたあとに、全体を点検して見つかったものです。
+**動いていても正しくない**ことがあるため、動作確認とは別に一度見直す価値があります。
+
+### 見つかった不具合と対処
+
+| # | 見つかったこと | なぜ問題か | 対処 |
+|---|---|---|---|
+| 1 | 静的ファイルへの **HEAD が 401** | ブラウザは GET を使うので画面は出るが、死活監視ツールは HEAD を使う。動いているのに落ちていると判定される | GET と HEAD の両方を許可（`SecurityConfig`） |
+| 2 | **ECR の脆弱性スキャンが動いていない** | 設定はあるのに結果が出ない。**検査されているつもりで、されていない**状態が一番よくない | `docker build --provenance=false --sbom=false` を付ける（9.2） |
+| 3 | Docker の**ログが無制限に増える** | 20GB のディスクが埋まり、`docker pull` が失敗する | `/etc/docker/daemon.json` で上限を設定（10MB × 3世代） |
+| 4 | **DB のパスワードが EC2 のメタデータから読める** | `describe-instance-attribute` の権限があれば誰でも読める | パラメータストアに暗号化して預け、EC2 が起動時に取得する（7.8） |
+
+### 安全面で直したこと
+
+| 内容 |
+|---|
+| **公開リポジトリに実際の IP アドレスを書かない**。攻撃者に狙う場所を教える情報を、わざわざ公開の場に置かない |
+| `terraform plan` の保存ファイル（`*.bin`）を削除。**DB のパスワードを含む**ため、手元にも残さない |
+
+### 標準に寄せたこと
+
+| 内容 |
+|---|
+| ハッシュ付きの画面ファイルを**1年キャッシュ**にした。それまで毎回 300KB 以上を取り直していた |
+| `compose.yaml` に**ヘルスチェック**を追加。`restart: always` は落ちたときしか効かず、固まったまま放置されるのを防げない |
+
+> **CORS の設定は、あえてそのままにしています。**
+> 画面を同梱する構成にしたことで実際には使われていませんが、
+> 消すと開発時の動きを確かめ直す必要が出ます。
+> **課題としての単純さを優先し、例外として残す**判断をしました（理由は `application.yml` にも記載）。
+
+### 設計書の記述に誤りがあった
+
+デプロイの過程で構成を何度か変えたため、**手順書のコード掲載が実装に追いつかなくなっていました。**
+そのまま写すと動かない状態だったため、実ファイルの内容に差し替えています。
+
+**教訓：構成を変えたら、その場で設計書も直す。** 後でまとめて直そうとすると、
+どれが正しいのか分からなくなります（[CLAUDE.md](../CLAUDE.md) 2章の方針どおり）。
+
+---
+
+## 14. つまずきポイント早見表
 
 | 症状 | 原因 | 対処 |
 |---|---|---|
@@ -2787,6 +3200,9 @@ Issue #48 はこれで決着です。
 | アプリが DB につながらない | ①RDS がまだ作成中 ②SG の設定 ③`.env` の値 | `aws rds describe-db-instances --db-instance-identifier taskboard-db --query "DBInstances[0].DBInstanceStatus"` が `available` か確認 |
 | 手元の PC から DB につなげない | 設計どおり（RDS はプライベートサブネットにあり外部から到達できない） | EC2 を踏み台にする（10.2） |
 | `apply` が10分以上終わらない | RDS の作成には通常10分ほどかかる | 待つ。15分を超えたらコンソールでイベントを確認 |
+| 静的ファイルへの HEAD が 401 になる | 許可を `HttpMethod.GET` だけで書いている。HEAD は別のメソッド扱い | GET と HEAD の両方を許可する（`SecurityConfig`） |
+| ECR の脆弱性スキャンの結果が出ない | 署名情報付きの形式で push している。ECR の基本スキャンが読めない | `docker build --provenance=false --sbom=false` を付ける |
+| ディスクが埋まる（`docker pull` が失敗） | Docker のログが際限なく増えている | `/etc/docker/daemon.json` でログの上限を決める（`user_data.sh`） |
 | `destroy` で RDS が消せない | `deletion_protection = true` になっている | `terraform.tfvars` で `false` にして `apply` してから `destroy` |
 | `docker compose` が見つからない | user_data の実行が未完了 | `sudo tail -f /var/log/cloud-init-output.log` で進捗を見る |
 | SSM で接続できない | エージェントの登録待ち、または IAM ロール未付与 | 3分待つ。`aws ssm describe-instance-information` で登録を確認 |
@@ -2796,7 +3212,7 @@ Issue #48 はこれで決着です。
 
 ---
 
-## 14. 用語集
+## 15. 用語集
 
 | 用語 | 読み | 意味 |
 |---|---|---|
@@ -2832,7 +3248,7 @@ Issue #48 はこれで決着です。
 
 ---
 
-## 15. 参考リンク
+## 16. 参考リンク
 
 | 内容 | URL |
 |---|---|
@@ -2849,6 +3265,9 @@ Issue #48 はこれで決着です。
 
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 1.2 | 2026-09-29 | 品質チェックの記録を13章として新設。公開リポジトリに実際の IP アドレスを書かない方針に変更し、8.6 の記録から実値を伏せた | |
+| 1.1 | 2026-09-29 | デプロイ後の品質チェックの結果を反映。7.5・7.6・7.10・7.11・7.12 のコード掲載を実ファイルの内容に差し替え（プライベートサブネット・RDS 関連の変数・DB 接続の引数などが抜けており、そのままコピーすると動かない状態だった）。9章のゴールと 9.1 の記述を実装に合わせ、9.6 の `deploy.yml` のビルド範囲を `./backend` から直下に修正。節番号の参照ずれ（8.6→8.8、9.5→9.6）を訂正。DB のパスワードをパラメータストアに移し、Docker のログ上限とヘルスチェックを追加。13章に3件の症状を追加 | |
+| 1.0 | 2026-09-29 | **アプリのデプロイを完了。** 画面（React）を jar に同梱する実装を反映し、12.3 を実際の手順に書き換え。調査の結果 **react-router は使われておらず URL が常に `/` のまま**と判明したため、「ディープリンクで 404 になる」という記述を訂正し、SPA フォールバックを実装しない理由を明記。HTTP 公開ではセッション Cookie の `Secure` / `SameSite=None` によりログインが維持できない問題と対処を 12.2 に追記。Swagger は本番で無効のため、9.4 の確認方法を `/actuator/health` と実画面に変更。9.5 にデプロイの記録と2回目以降の手順・戻し方を新設 | |
 | 0.9 | 2026-09-29 | 初回の `terraform apply` を実施し、その結果を反映。**新方式の無料プランには機能面の制限もある**ことが分かったため 1.3 に追記（RDS のバックアップ保持日数は 1日まで、EC2 は t2.micro が対象外）。インスタンスタイプを t3.micro、保持日数を 1日に変更し、費用の記載も更新。構築・動作確認の結果を 8.6 に記録 | |
 | 0.8 | 2026-09-29 | apply 後の動作確認を段階に分ける方針を追加。8.0 に「作るのは一度に、確認は段階ごとに」を新設し、8.3 ネットワーク・8.4 サーバー・8.5 データベースの確認手順を分けて記載（[CLAUDE.md](../CLAUDE.md) 5章のルール化に対応）。フロントエンド（React）の配信方法を「バックエンドに同梱」に決定し、12章を書き換え（#48 決着）| |
 | 0.7 | 2026-09-29 | データベースを「EC2 上の PostgreSQL コンテナ」から **RDS for PostgreSQL（db.t4g.micro）** に変更。自動バックアップが得られ、EC2 を作り直してもデータが残るようにするため。あわせてデータベース専用のプライベートサブネットを2つ新設し（RDS は 2AZ にまたがるサブネットグループを要求するため）、DB 用セキュリティグループは「アプリの SG からの 5432番のみ」に限定。判断の経緯を 1.3、RDS の設計意図を 7.8 として新設。費用試算・構成図・バックアップ手順（10.2）・運用パターン（10.4）を RDS 前提に書き換えた。12章は、教材が S3＋CloudFront を使わない方針と分かったため「未決定」に戻した | |

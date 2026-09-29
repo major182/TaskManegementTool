@@ -1,0 +1,28 @@
+# docker build に送らないもの。
+# ここに書いたものはイメージのビルド範囲に含まれない。
+# 送る量が減るとビルドが速くなるだけでなく、秘密情報の混入も防げる。
+
+# ★最重要★ インフラの定義。
+# infra/terraform/terraform.tfstate には RDS のパスワードが平文で入っている。
+# ビルド範囲に含めると、イメージの履歴から読み取れてしまう可能性がある
+infra
+
+# バックエンドのビルド成果物（イメージの中で作り直す）
+backend/build
+backend/.gradle
+backend/bin
+# 画面はビルド時に 1段目から配置する。手元の生成物は持ち込まない
+backend/src/main/resources/static
+
+# フロントエンドの依存とビルド成果物（イメージの中で入れ直す）
+frontend/node_modules
+frontend/dist
+
+# アプリのビルドに不要なもの
+.git
+.github
+docs
+prototype
+compose.yaml
+*.log
+*.md
