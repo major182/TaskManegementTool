@@ -1,0 +1,150 @@
+# CD（継続的デリバリー）：main にマージされたら、自動で本番に反映する。
+#
+# CI（ci.yml）が「壊れたコードを main に入れない」ための仕組みなのに対し、
+# こちらは「main に入ったものを確実に本番へ届ける」ための仕組み。
+#
+# 流れ：
+#   1. 画面とサーバーを1つのイメージにビルドする
+#   2. ECR に push する（latest と、コミットごとのタグの2つ）
+#   3. EC2 に「新しいイメージに入れ替えろ」と指示する
+#   4. 死活確認が通るまで待つ。通らなければこのワークフローも失敗させる
+#
+# AWS への認証はアクセスキーではなく OIDC を使う。
+# GitHub が発行する一時的な身分証を AWS が検証する方式で、
+# 永続的な鍵を GitHub に預けずに済む（infra/terraform/github_oidc.tf）。
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # 画面もサーバーも1つのイメージに入るため、どちらの変更でも動かす。
+      # ドキュメントだけの変更では動かさない（無駄なデプロイをしない）
+      - 'backend/**'
+      - 'frontend/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - '.github/workflows/deploy.yml'
+
+# 同時に2つ走ると、どちらのイメージが反映されたか分からなくなる。
+# 後から来たものを待たせ、順番に処理する
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  # OIDC の身分証を発行するために必要
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REPOSITORY: taskboard-backend
+  # デプロイ先を探すときの目印（infra/terraform の default_tags と合わせる）
+  PROJECT_TAG: taskboard
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # アクセスキーではなく OIDC でロールを引き受ける
+      - name: AWS の認証
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR にログイン
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: イメージをビルドして push
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY"
+
+          # ビルドの起点はリポジトリの直下（末尾の "."）。画面とサーバーの両方を含めるため。
+          #
+          # --provenance=false / --sbom=false を付ける理由：
+          #   付けないと「署名情報付き」の形式で push され、ECR の脆弱性スキャンが
+          #   イメージを読めずに結果が出ない。設定はあるのに検査されない状態になる
+          #   （docs/07_deployment.md 13章）
+          docker build \
+            --provenance=false --sbom=false \
+            --platform linux/amd64 \
+            -t "$IMAGE:$IMAGE_TAG" \
+            -t "$IMAGE:latest" \
+            .
+
+          # コミットごとのタグも push しておく。
+          # 不具合が出たとき、EC2 側で前のタグを指定すれば戻せる
+          docker push "$IMAGE:$IMAGE_TAG"
+          docker push "$IMAGE:latest"
+
+      - name: デプロイ先の EC2 を探す
+        id: target
+        run: |
+          # インスタンス ID を固定で持たせると、user_data を変えて EC2 が
+          # 作り直されるたびに ID が変わり、そのつどデプロイが壊れる。
+          # タグから探すことで、作り直されても追従できる
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=$PROJECT_TAG" \
+                      "Name=instance-state-name,Values=running" \
+            --query "Reservations[].Instances[].InstanceId" \
+            --output text)
+
+          if [ -z "$INSTANCE_ID" ] || [ "$(echo "$INSTANCE_ID" | wc -w)" -ne 1 ]; then
+            echo "::error::デプロイ先が1台に定まりません（見つかった ID: '$INSTANCE_ID'）"
+            exit 1
+          fi
+
+          echo "instance-id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "デプロイ先: $INSTANCE_ID"
+
+      - name: EC2 に反映する
+        env:
+          INSTANCE_ID: ${{ steps.target.outputs.instance-id }}
+        run: |
+          # 実際の手順は EC2 側の /opt/taskboard/deploy.sh に置いてある
+          # （infra/terraform/user_data.sh が作成）。ここでは呼ぶだけ
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "deploy ${{ github.sha }}" \
+            --parameters 'commands=["bash /opt/taskboard/deploy.sh"]' \
+            --timeout-seconds 600 \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "コマンド ID: $COMMAND_ID"
+
+          # 終わるまで待つ。失敗しても wait はエラーを返すため、判定は次の行で行う
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" || true
+
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query "Status" --output text)
+
+          echo "--- 実行結果 ---"
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query "StandardOutputContent" --output text
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::デプロイに失敗しました（状態: $STATUS）"
+            aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "StandardErrorContent" --output text
+            exit 1
+          fi
+
+          echo "::notice::デプロイ成功（${{ github.sha }}）"

@@ -48,9 +48,14 @@ resource "aws_iam_role" "github_actions" {
   assume_role_policy = data.aws_iam_policy_document.github_assume_role.json
 }
 
-# ---------- 与える権限：ECR への push だけ（最小権限） ----------
+# ---------- 与える権限（最小権限） ----------
 # 人が使う IAM ユーザーには Administrator を付けたが、
-# 自動化に渡す権限は必要最小限にする。この使い分けが重要
+# 自動化に渡す権限は必要最小限にする。この使い分けが重要。
+#
+# デプロイに必要なのは次の3つだけ。
+#   1. ECR にイメージを push する
+#   2. デプロイ先の EC2 を探す（タグで絞る）
+#   3. その EC2 にデプロイのコマンドを送る
 data "aws_iam_policy_document" "ecr_push" {
   statement {
     # ログイン用トークンの取得。リソースを限定できない API のため "*" になる
@@ -69,6 +74,47 @@ data "aws_iam_policy_document" "ecr_push" {
     ]
     # このリポジトリにだけ push できる
     resources = [aws_ecr_repository.backend.arn]
+  }
+
+  # ---------- デプロイ先の EC2 を探す ----------
+  # インスタンス ID を GitHub 側に固定で持たせると、user_data を変えて
+  # EC2 が作り直されるたびに ID が変わり、そのつどデプロイが壊れる。
+  # 代わりにタグから探す。この API はリソースを限定できないため "*" になるが、
+  # 「一覧を見る」だけで、起動も停止も削除もできない
+  statement {
+    actions   = ["ec2:DescribeInstances"]
+    resources = ["*"]
+  }
+
+  # ---------- EC2 にデプロイのコマンドを送る ----------
+  # 送れるのは、このプロジェクトのタグが付いたインスタンスに対してのみ。
+  # 他のインスタンスには送れない
+  statement {
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ec2:${var.aws_region}:${data.aws_caller_identity.current.account_id}:instance/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "ssm:resourceTag/Project"
+      values   = [var.project_name]
+    }
+  }
+
+  # 使えるのは「シェルコマンドを実行する」という決まった手順書だけ。
+  # AWS が用意している他の手順書（設定変更など）は使えない
+  statement {
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ssm:${var.aws_region}::document/AWS-RunShellScript"]
+  }
+
+  # 送ったコマンドの結果を受け取る。
+  # これが無いと、実行はできても成功したかどうかが分からない
+  statement {
+    actions = [
+      "ssm:GetCommandInvocation",
+      "ssm:ListCommandInvocations",
+    ]
+    resources = ["*"]
   }
 }
 

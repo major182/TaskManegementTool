@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.14（ドラフト） |
+| ドキュメント版数 | 0.15（ドラフト） |
 | 作成日 | 2026-09-17 |
 | 最終更新日 | 2026-09-29 |
 | 作成者 | （氏名） |
@@ -103,7 +103,7 @@ TaskManegementTool/
 |---|---|---|
 | エディタ | IntelliJ IDEA Community Edition（Java）／VS Code（React） | Java は IntelliJ の補完・デバッグが強い。VS Code 1本にまとめる場合は Extension Pack for Java を入れる |
 | ソース管理 | Git / GitHub | 現場では必ず使う |
-| CI | GitHub Actions | push のたびにビルドとテストを自動で動かせる。GitHub と同じ場所で完結する。設定は `.github/workflows/ci.yml`（v0.8 で作成）。PR ごとにフロントエンドの `npm run check`・`npm run build` と、バックエンドの `./gradlew check` を実行する |
+| CI / CD | GitHub Actions | push のたびにビルドとテストを自動で動かせる。GitHub と同じ場所で完結する。設定は `.github/workflows/ci.yml`（v0.8 で作成）。PR ごとにフロントエンドの `npm run check`・`npm run build` と、バックエンドの `./gradlew check` を実行する。**`main` へのマージ時は `deploy.yml` が自動で本番に反映する**（ビルド → ECR への push → EC2 での入れ替え → 死活確認）。AWS への認証は OIDC で、アクセスキーを GitHub に置かない（v0.15、[07 デプロイ手順書 9.6](07_deployment.md)） |
 | 公開先 | **AWS**（東京リージョン） | 課題の指定により AWS を使う。手順とサービスの選定理由は [07 デプロイ手順書](07_deployment.md)（v0.10 で確定。v0.9 で Vercel / Render / Neon から変更） |
 | ┗ インフラの構築方法 | **Terraform（IaC）＋ AWS CLI** | 課題の指定。構成をコードで管理することで、再現・レビュー・一括削除ができる。コードは `infra/terraform/` |
 | ┗ API（Spring Boot） | **EC2（t3.micro）上の Docker** | コンテナで動かす前提で**リポジトリ直下の `Dockerfile`** を用意（画面とサーバーの両方をビルドするため、`backend/` の中には置けない）。待ち受けポートは環境変数 `PORT` で受け取る。App Runner・ECS (Fargate) ＋ ALB は月 $25 前後かかるため、付与クレジットの範囲に収まる EC2（月 $10 前後）を選んだ。**t2.micro は新方式の無料プランの対象外**で作成できない（[07 デプロイ手順書 1.3](07_deployment.md)） |
@@ -196,6 +196,7 @@ TaskManegementTool/
 ## 改訂履歴
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.15 | 2026-09-29 | 自動デプロイ（CD）を導入。`main` へのマージで本番に反映されるようになった旨を 3.4 の CI 欄に追記 | |
 | 0.14 | 2026-09-29 | デプロイ完了を反映。`Dockerfile` をリポジトリ直下に移し3段構成（画面のビルド → jar のビルド → 実行）にした旨を記載 | |
 | 0.13 | 2026-09-29 | 実際に構築した結果を反映。EC2 を t2.micro から **t3.micro** に変更（t2.micro は新方式の無料プランの対象外で作成できなかった）。RDS の自動バックアップ保持日数も無料プランの上限に合わせて 7日から 1日に変更 | |
 | 0.12 | 2026-09-29 | 画面（React）の配信方法を「バックエンドに同梱」に決定（#48）。CORS・CSRF の手当てが不要になり、5.1 の前提をそのまま満たす。HTTPS にできない点は、アクセス元を自分の IP に限定することで許容する | |

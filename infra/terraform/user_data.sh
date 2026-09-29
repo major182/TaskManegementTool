@@ -118,7 +118,49 @@ services:
       - "80:8080"
 COMPOSEFILE
 
-# ---------- 5. ECR にログインしてアプリを起動する ----------
+# ---------- 5. デプロイ用のスクリプトを置く ----------
+# 新しいイメージに入れ替える手順をサーバー側に置いておく。
+# GitHub Actions（.github/workflows/deploy.yml）はこれを呼ぶだけでよく、
+# 長いコマンドをワークフローに埋め込まずに済む。
+# 手動で入れ替えたいときも、同じ手順をそのまま実行できる
+cat > /opt/taskboard/deploy.sh <<'DEPLOYFILE'
+#!/bin/bash
+# 新しいイメージに入れ替える。
+# 失敗したらすぐ止める（-e）。何を実行したかログに残す（-x）
+set -eux
+
+cd /opt/taskboard
+
+# ECR のログインは12時間で切れるため、毎回取り直す。
+# 認証には EC2 に付けた権限（iam.tf）を使うので、アクセスキーは要らない
+REGISTRY=$(grep ECR_IMAGE .env | cut -d= -f2 | cut -d/ -f1)
+aws ecr get-login-password --region AWS_REGION_PLACEHOLDER   | docker login --username AWS --password-stdin "$REGISTRY"
+
+docker compose pull
+docker compose up -d
+
+# 古いイメージを消す。1つ約 300MB あり、放っておくと 20GB のディスクが埋まる
+docker image prune -f
+
+# 起動を待って死活確認する。ここで失敗すれば、呼び出し元も失敗と分かる
+for i in $(seq 1 30); do
+  if curl -sf http://localhost:80/actuator/health > /dev/null; then
+    echo "デプロイ成功: アプリが応答しています"
+    exit 0
+  fi
+  sleep 5
+done
+
+echo "デプロイ失敗: 150秒待っても応答がありません" >&2
+docker compose logs app --tail 50 >&2
+exit 1
+DEPLOYFILE
+
+# テンプレートの置き換えではリージョンを埋め込めないため、ここで差し替える
+sed -i "s/AWS_REGION_PLACEHOLDER/${aws_region}/" /opt/taskboard/deploy.sh
+chmod +x /opt/taskboard/deploy.sh
+
+# ---------- 6. ECR にログインしてアプリを起動する ----------
 # インスタンスプロファイル（iam.tf）の権限を使うので、アクセスキーは不要。
 # 初回はまだイメージが push されていないことがあるため、失敗しても処理を止めない
 aws ecr get-login-password --region ${aws_region} \
@@ -128,7 +170,7 @@ cd /opt/taskboard
 docker compose pull || true
 docker compose up -d || true
 
-# ---------- 6. 再起動時に自動で立ち上がるようにする ----------
+# ---------- 7. 再起動時に自動で立ち上がるようにする ----------
 cat > /etc/systemd/system/taskboard.service <<'SERVICEFILE'
 [Unit]
 Description=Taskboard application
