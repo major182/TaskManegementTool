@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.8（ドラフト） |
+| ドキュメント版数 | 0.9（ドラフト） |
 | 作成日 | 2026-09-27 |
 | 最終更新日 | 2026-09-29 |
 | 作成者 | （氏名） |
@@ -43,7 +43,7 @@
 |---|---|---|
 | 月額コスト方針 | **付与されるクレジット（約 $140）の範囲に収める**（実質無料） | スクール課題のため。本番相当の構成は 2.7 で別途解説する |
 | 稼働方針 | **常時稼働しない。** 作業時だけ起動し、長く触らないときは削除する | スクール課題であり24時間公開する必要がない。運用パターンは 10.4 |
-| バックエンド | **EC2 インスタンス1台** の上で Docker として動かす | App Runner（約 $25／月）や ECS Fargate ＋ ALB（約 $25／月〜）に比べ、EC2 t2.micro は約 $11／月と最も安い |
+| バックエンド | **EC2 インスタンス1台** の上で Docker として動かす | App Runner（約 $25／月）や ECS Fargate ＋ ALB（約 $25／月〜）に比べ、EC2 t3.micro は約 $10／月と最も安い |
 | データベース | **RDS for PostgreSQL（db.t4g.micro）** | 月 $21 ほど増えるが、**自動バックアップが取れ、EC2 を作り直してもデータが残る**。スクール教材の構成にも合う。EC2 同居案との比較は 1.4 |
 | コンテナイメージの置き場 | **Amazon ECR（プライベート）** | EC2 上でビルドするとメモリ不足で失敗する。GitHub Actions でビルドして ECR に置き、EC2 は受け取るだけにする |
 | フロントエンド（React） | **バックエンドに同梱**（1コンテナで配信） | 画面と API が同じドメインになり、CORS・CSRF の手当てが不要。インフラの変更も要らない（12章） |
@@ -66,7 +66,7 @@
  │ │  ┌─── パブリックサブネット（AZ-a）──────────────┐  │ │
  │ │  │ 10.0.1.0/24                                │  │ │
  │ │  │   ┌────────────────────────┐               │  │ │
- │ │  │   │ EC2 t2.micro           │               │  │ │
+ │ │  │   │ EC2 t3.micro           │               │  │ │
  │ │  │   │ Amazon Linux 2023      │               │  │ │
  │ │  │   │  ┌──────────────────┐  │               │  │ │
  │ │  │   │  │ app コンテナ      │  │               │  │ │
@@ -156,6 +156,43 @@ DB の置き場所には2つの案がありました。**当初は費用を優�
 > - クレジットを使い切ると、**そこから先は通常料金が請求されます**
 > - 残高は [請求ダッシュボードの「無料利用枠」ページ](https://console.aws.amazon.com/billing/home#/freetier) で確認できます。**手順A（4.4）で必ず確認してください**
 
+#### ⚠️ 無料プランには「機能の制限」もある（実際にぶつかった）
+
+**クレジットが付くだけで、機能は通常と同じ ―― ではありません。**
+無料プランのうちは、使えるサービスの設定値そのものに上限があります。
+実際に `terraform apply` で2回失敗しました（2026-09-29）。
+
+| 制限された項目 | 指定した値 | エラー | 対処 |
+|---|---|---|---|
+| RDS のバックアップ保持日数 | 7日 | `FreeTierRestrictionError: The specified backup retention period exceeds the maximum available to free tier customers.` | **1日**に変更 |
+| EC2 のインスタンスタイプ | `t2.micro` | `InvalidParameterCombination: The specified instance type is not eligible for Free Tier.` | **`t3.micro`** に変更 |
+
+無料プランで使える EC2 のインスタンスタイプは、次のコマンドで確認できます。
+
+```powershell
+aws ec2 describe-instance-types --filters "Name=free-tier-eligible,Values=true" --query "InstanceTypes[].{Type:InstanceType,MemoryMiB:MemoryInfo.SizeInMiB,Arch:ProcessorInfo.SupportedArchitectures[0]}" --output table
+```
+
+東京リージョンでは次の8種類でした（2026-09 時点）。
+
+| タイプ | メモリ | アーキテクチャ |
+|---|---|---|
+| **t3.micro** | 1GB | x86_64（**採用**） |
+| t3.small | 2GB | x86_64 |
+| t4g.micro / t4g.small | 1GB / 2GB | arm64 |
+| t8i.micro / t8i.small | 1GB / 2GB | x86_64 |
+| c7i-flex.large / m7i-flex.large | 4GB / 8GB | x86_64 |
+
+> **`t2.micro` は「無料枠の代名詞」として多くの記事に出てきますが、新方式の無料プランでは使えません。**
+> 古い記事のとおりに書くとここで失敗します。
+>
+> なお **t3.micro は t2.micro より安く**（$0.0136/時 対 $0.0152/時）、メモリは同じ 1GB です。
+> 費用の面では不利になりません。
+
+**制限を外したい場合は、有料プランにアップグレードします**（エラーメッセージにもそう書かれています）。
+アップグレードしてもクレジットは引き続き使われますが、**使い切った後は実際に課金が始まります。**
+本プロジェクトでは制限内に収める方針とし、アップグレードはしていません。
+
 #### 実際に使えるクレジットはいくらか
 
 クレジットは2階建てになっています。
@@ -190,7 +227,7 @@ DB の置き場所には2つの案がありました。**当初は費用を優�
 
 | 項目 | 単価（東京リージョン） | 課金される条件 |
 |---|---|---|
-| EC2 t2.micro | $0.0152／時 | **起動中のみ**（停止中は課金されない） |
+| EC2 **t3.micro** | $0.0136／時 | **起動中のみ**（停止中は課金されない） |
 | EBS gp3 20GB | $0.096／GB・月 ＝ **$1.92／月** | **存在する限り常に**（EC2 が停止中でも） |
 | パブリック IPv4（Elastic IP）1個 | $0.005／時 ＝ **$3.65／月** | **確保している限り常に**（EC2 が停止中でも） |
 | **RDS db.t4g.micro** | **$0.025／時 ＝ 約 $18.25／月** | **起動中のみ**（停止できるが最大7日で自動再開する） |
@@ -215,7 +252,7 @@ DB の置き場所には2つの案がありました。**当初は費用を優�
 | **C. 参考：常時稼働** | 730時間 | $29.35 | $8.43 | 約 $37.8 |
 | **D. 使わない期間は `destroy` する** | 0時間 | $0 | **$0** | **$0** |
 
-> 従量分は EC2（$0.0152／時）と RDS（$0.025／時）の合計 $0.0402／時で計算しています。
+> 従量分は EC2（$0.0136／時）と RDS（$0.025／時）の合計 $0.0386／時で計算しています。
 >
 > **⚠️ RDS は「停止」で節約しにくい点に注意してください。**
 > RDS も停止できますが、**最大7日で AWS が自動的に再起動します。**
@@ -310,7 +347,7 @@ AWS のデータセンターは世界中にあります。
 
 ```hcl
 resource "aws_instance" "app" {
-  instance_type = "t2.micro"
+  instance_type = "t3.micro"
   ami           = "ami-xxxxxxxx"
 }
 ```
@@ -343,7 +380,7 @@ Terraform は3つの状態を比べて動きます。
 ```
  ①コード (.tf)          ②状態ファイル              ③実際の AWS
  「こうあってほしい」     (terraform.tfstate)        「今こうなっている」
- EC2 1台、t2.micro       「前回こう作った」と        EC2 1台、t2.micro
+ EC2 1台、t3.micro       「前回こう作った」と        EC2 1台、t3.micro
                           いう記録
         │                       │                          │
         └───────────────────────┴──────────────────────────┘
@@ -429,7 +466,7 @@ AI にコマンドを実行させるのは効率的ですが、**AWS は実際�
 | DB | RDS（単一 AZ、自動バックアップあり） | RDS（**複数 AZ 冗長化**、リードレプリカ） |
 | DB の場所 | **プライベートサブネット**（採用済み） | 同じ |
 | サーバーが落ちたら | 手で再起動 | Auto Scaling が自動で入れ替え |
-| DB のデータが消えたら | **特定時点への復元が可能**（保持7日） | 同じ（保持期間を長く取る） |
+| DB のデータが消えたら | **特定時点への復元が可能**（保持1日） | 同じ（保持期間を長く取る。無料プランの制限が無いため） |
 | 公開範囲 | 自分の IP のみ（学習用のため） | 全世界に公開し、WAF・認証・レート制限で守る |
 | HTTPS | Let's Encrypt を手で設定 | ACM（無料の証明書）＋ ALB / CloudFront |
 | tfstate の置き場 | 手元のファイル | S3 ＋ ロック |
@@ -1070,11 +1107,11 @@ variable "public_subnet_cidr" {
 
 variable "instance_type" {
   description = <<-EOT
-    EC2 のサイズ。無料利用枠の対象は、東京リージョンでは t2.micro。
+    EC2 のサイズ。無料プランで使えるのは t3.micro など（t2.micro は対象外。1.3 参照）。
     メモリが 1GB しかないため、user_data.sh でスワップ領域を 2GB 追加している。
   EOT
   type        = string
-  default     = "t2.micro"
+  default     = "t3.micro"
 }
 
 variable "root_volume_size" {
@@ -1371,7 +1408,7 @@ DBeaver などでつなぎたい場合は EC2 を踏み台にする必要があ�
 
 | 設定 | 値 | 意味 |
 |---|---|---|
-| `backup_retention_period` | `7` | 7日分の自動バックアップ。**ストレージと同量（20GB）まで無料** |
+| `backup_retention_period` | `1` | 1日分の自動バックアップ。**無料プランの上限が 1日**のため（1.3）。ストレージと同量（20GB）までは無料 |
 | `backup_window` | `18:00-19:00` | UTC 表記。**日本時間の 03:00〜04:00** |
 | `skip_final_snapshot` | `true` | `destroy` 時に最終スナップショットを取らない。**学習用のため。本番では必ず `false`** |
 | `deletion_protection` | `false` | `destroy` でデータベースを消せる。**本番では `true`** |
@@ -1454,7 +1491,7 @@ EC2 が**初回起動したときに1回だけ** root 権限で実行される�
 set -euxo pipefail
 
 # ---------- 1. スワップ領域を作る ----------
-# t2.micro はメモリが 1GB しかない。
+# t3.micro はメモリが 1GB しかない。
 # データベースは RDS に分けたが、JVM とビルドツールだけでも足りなくなることがあり、
 # メモリ不足になると OOM Killer にプロセスを殺される。
 # ディスクの一部をメモリの代わりに使うスワップを 2GB 用意して余裕を持たせる
@@ -1866,11 +1903,11 @@ Plan: 29 to add, 0 to change, 0 to destroy.
 
 | 確認する箇所 | 期待される値 |
 |---|---|
-| `aws_instance.app` の `instance_type` | `"t2.micro"` |
+| `aws_instance.app` の `instance_type` | `"t3.micro"` |
 | `aws_vpc_security_group_ingress_rule` の数 | 2個（http と https のみ。ssh は作られない） |
 | その http / https の `cidr_ipv4` | **自分の IP＋`/32`**。`0.0.0.0/0` になっていたら止める |
 | `aws_db_instance.main` の `publicly_accessible` | `false`（インターネットから直接つながらない） |
-| `aws_db_instance.main` の `backup_retention_period` | `7`（自動バックアップが有効） |
+| `aws_db_instance.main` の `backup_retention_period` | `1`（自動バックアップが有効） |
 | `aws_db_instance.main` の `storage_encrypted` | `true` |
 | `aws_route_table.private` の `route` | `[]`（インターネットへの経路が無い） |
 | `aws_instance.app` の `root_block_device` の `volume_size` | `20` |
@@ -2030,7 +2067,7 @@ aws rds describe-db-instances --db-instance-identifier taskboard-db --query "DBI
 | `Status` | `available`（`creating` ならまだ作成中。10分ほどかかる） |
 | `Public` | **`False`** |
 | `Encrypted` | `True` |
-| `Backup` | `7` |
+| `Backup` | `1` |
 
 #### EC2 から接続できるか（つながるべき経路）
 
@@ -2074,7 +2111,83 @@ Test-NetConnection -ComputerName (terraform -chdir=infra/terraform output -raw d
 
 ---
 
-### 8.6 よくあるエラー
+### 8.6 構築と動作確認の記録（2026-09-29）
+
+実際に構築したときの結果です。次に同じことをするときの目安になります。
+
+#### 作成されたリソース
+
+| 項目 | 値 |
+|---|---|
+| VPC | `10.0.0.0/16` |
+| EC2 | `t3.micro` / Amazon Linux 2023 |
+| Elastic IP | `52.197.115.225` |
+| RDS | `taskboard-db` / PostgreSQL 17.11 / db.t4g.micro |
+| RDS のプライベート IP | `10.0.11.96` |
+
+#### 所要時間
+
+| 工程 | 時間 |
+|---|---|
+| ネットワーク・IAM・ECR の作成 | 30秒ほど |
+| RDS の作成 | **約7分** |
+| EC2 の作成 | 13秒 |
+| EC2 の初期設定（`user_data.sh`） | **約1分30秒** |
+
+> **EC2 は「作成完了」＝「使える」ではありません。**
+> インスタンスの作成自体は13秒で終わりますが、そこから Docker の導入などが1分30秒ほど続きます。
+> 作成直後に `docker` を叩くと `command not found` になります。完了は次で確認できます。
+>
+> ```bash
+> test -f /var/lib/cloud/instance/boot-finished && echo done
+> ```
+
+#### 確認結果
+
+**①ネットワーク**
+
+| 確認項目 | 結果 |
+|---|---|
+| サブネット3つ（public 1 / private 2） | ✅ |
+| プライベートの AZ 分散（`1a` と `1c`） | ✅ |
+| `taskboard-private-rt` に `0.0.0.0/0` が無い | ✅ |
+| `taskboard-app-sg`：80・443 が自分の IP `/32` のみ、22番なし | ✅ |
+| `taskboard-db-sg`：5432 が `FromIP: []` / `FromSG: [アプリSG]` | ✅ |
+| `taskboard-db-sg` の送信ルールが `[]` | ✅ |
+
+**②サーバー（EC2）**
+
+| 確認項目 | 結果 |
+|---|---|
+| `running` / `t3.micro` / IMDSv2 `required` | ✅ |
+| SSM の登録（`PingStatus: Online`） | ✅ |
+| スワップ 2.0Gi | ✅ |
+| Docker 25.0.14 が `active` | ✅ |
+| Docker Compose v5.5.1 | ✅ |
+| `/opt/taskboard/compose.yaml` と `.env` | ✅ |
+| `.env` の `DB_HOST` が RDS のエンドポイント | ✅ |
+| `taskboard.service` が `enabled` | ✅ |
+| 起動中のコンテナ | 0個（**イメージ未 push のため正常**） |
+
+**③データベース（RDS）**
+
+| 確認項目 | 結果 |
+|---|---|
+| `available` / PostgreSQL 17.11 / db.t4g.micro | ✅ |
+| `PubliclyAccessible: False` / 暗号化 `True` / 保持 `1`日 | ✅ |
+| プライベートサブネット2つに配置 | ✅ |
+| **EC2 から** 5432番に到達できる | ✅ |
+| **EC2 から** `psql` で接続し `SELECT version()` が返る | ✅ |
+| テーブル一覧が空（Flyway 未実行のため） | ✅ |
+| **手元の PC から**の名前解決 → `10.0.11.96`（プライベート IP） | ✅ |
+| **手元の PC から**の 5432番接続 → `TcpTestSucceeded: False` | ✅ |
+
+> **`psql` の `dt` が `Did not find any relations.` を返すのは正常です。**
+> アプリを起動すると Flyway がテーブルを作ります。
+
+---
+
+### 8.7 よくあるエラー
 
 | エラー | 原因と対処 |
 |---|---|
@@ -2084,7 +2197,7 @@ Test-NetConnection -ComputerName (terraform -chdir=infra/terraform output -raw d
 | `Error acquiring the state lock` | 前回の Terraform が異常終了した。`terraform force-unlock <ID>` （ID はエラーに表示される） |
 | apply が途中で失敗した | **失敗しても途中まで作られています。** 直してから `terraform apply` を再実行すれば、足りない分だけ作られます |
 
-### 8.7 （発展）tfstate を S3 に置く
+### 8.8 （発展）tfstate を S3 に置く
 
 今は `terraform.tfstate` が手元の PC にあります。学習用ならこれで十分ですが、次の弱点があります。
 
@@ -2126,7 +2239,7 @@ aws s3api put-bucket-versioning --bucket "taskboard-tfstate-$accountId" --versio
 ### 9.1 なぜ EC2 上でビルドしないのか
 
 `backend/Dockerfile` は Gradle でビルドする2段構えになっています。
-しかし **t2.micro（メモリ 1GB）では Gradle のビルドがメモリ不足で失敗します。**
+しかし **t3.micro（メモリ 1GB）では Gradle のビルドがメモリ不足で失敗します。**
 
 そこで、**ビルドは GitHub Actions（無料）で行い、出来上がったイメージだけを ECR 経由で EC2 に届けます。**
 これは実務でも標準的な形（ビルドと実行の分離）です。
@@ -2423,7 +2536,7 @@ sudo docker compose restart app   # アプリだけ再起動
 
 ### 10.2 DB のバックアップ
 
-**RDS が毎日自動でバックアップを取っています**（保持7日、日本時間の 03:00〜04:00）。
+**RDS が毎日自動でバックアップを取っています**（保持1日、日本時間の 03:00〜04:00）。
 EC2 を作り直しても、`terraform destroy` で EC2 だけ消しても、データは残ります。
 
 復元したいときは、コンソールまたは CLI から「特定時点への復元」を行います。
@@ -2662,6 +2775,9 @@ Issue #48 はこれで決着です。
 | コンソールにリソースが表示されない | 見ているリージョンが違う | 画面右上で「東京」を選ぶ |
 | `AgentToolkit is only available in us-east-1` | `aws agent-toolkit` は東京リージョンでは動かない | `--region us-east-1` を付ける（5.5） |
 | `aws` の出力が `cp932 codec can't encode` で落ちる | 日本語 Windows の文字コードで、記号が扱えない | `--query` で必要な項目だけ取り出す（例：`--query "skills[].name" --output text`） |
+| `FreeTierRestrictionError` | 無料プランの設定値の上限を超えた（例：RDS のバックアップ保持日数） | 値を下げる（1.3）。または有料プランにアップグレード |
+| `The specified instance type is not eligible for Free Tier` | 無料プランで使えないインスタンスタイプ（`t2.micro` など） | `aws ec2 describe-instance-types --filters "Name=free-tier-eligible,Values=true"` で確認し、`t3.micro` などに変更 |
+| EC2 作成直後に `docker: command not found` | 初期設定スクリプトがまだ実行中（1分30秒ほどかかる） | `test -f /var/lib/cloud/instance/boot-finished` が通るまで待つ |
 | `terraform apply` で権限エラー | IAM ユーザーの権限不足 | `AdministratorAccess` が付いているか確認 |
 | `plan` に `-/+` が出た | リソースが作り直される＝**データが消える** | apply せずに原因を調べる。`user_data` の変更が典型 |
 | ブラウザで開けない | ①**アクセス元の IP が許可されていない** ②コンテナが起動していない ③まだ起動中 | **まず 7.14 で IP を確認・更新** → `docker compose ps` → 3分待つ |
@@ -2733,6 +2849,7 @@ Issue #48 はこれで決着です。
 
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.9 | 2026-09-29 | 初回の `terraform apply` を実施し、その結果を反映。**新方式の無料プランには機能面の制限もある**ことが分かったため 1.3 に追記（RDS のバックアップ保持日数は 1日まで、EC2 は t2.micro が対象外）。インスタンスタイプを t3.micro、保持日数を 1日に変更し、費用の記載も更新。構築・動作確認の結果を 8.6 に記録 | |
 | 0.8 | 2026-09-29 | apply 後の動作確認を段階に分ける方針を追加。8.0 に「作るのは一度に、確認は段階ごとに」を新設し、8.3 ネットワーク・8.4 サーバー・8.5 データベースの確認手順を分けて記載（[CLAUDE.md](../CLAUDE.md) 5章のルール化に対応）。フロントエンド（React）の配信方法を「バックエンドに同梱」に決定し、12章を書き換え（#48 決着）| |
 | 0.7 | 2026-09-29 | データベースを「EC2 上の PostgreSQL コンテナ」から **RDS for PostgreSQL（db.t4g.micro）** に変更。自動バックアップが得られ、EC2 を作り直してもデータが残るようにするため。あわせてデータベース専用のプライベートサブネットを2つ新設し（RDS は 2AZ にまたがるサブネットグループを要求するため）、DB 用セキュリティグループは「アプリの SG からの 5432番のみ」に限定。判断の経緯を 1.3、RDS の設計意図を 7.8 として新設。費用試算・構成図・バックアップ手順（10.2）・運用パターン（10.4）を RDS 前提に書き換えた。12章は、教材が S3＋CloudFront を使わない方針と分かったため「未決定」に戻した | |
 | 0.6 | 2026-09-29 | アプリの公開範囲を「インターネット全体」から「作業する PC の IP のみ」に変更。`allowed_app_cidr` 変数を追加し、80番・443番のルールを `for_each` で生成する形に変更（未設定なら誰にも開かない）。グローバル IP の調べ方と、IP が変わったときの復旧手順として 7.13（現 7.14）を新設。13章に「昨日まで開けたのに開けない」等の症状を追加。12章に、CloudFront を採用する場合は IP 制限と両立しない点を追記 | |

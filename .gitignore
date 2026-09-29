@@ -24,3 +24,6 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+
+# terraform plan の保存ファイル（秘密の値を含むため Git に入れない）
+*.bin
