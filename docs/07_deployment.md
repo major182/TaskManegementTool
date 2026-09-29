@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.7（ドラフト） |
+| ドキュメント版数 | 0.8（ドラフト） |
 | 作成日 | 2026-09-27 |
 | 最終更新日 | 2026-09-29 |
 | 作成者 | （氏名） |
@@ -46,7 +46,7 @@
 | バックエンド | **EC2 インスタンス1台** の上で Docker として動かす | App Runner（約 $25／月）や ECS Fargate ＋ ALB（約 $25／月〜）に比べ、EC2 t2.micro は約 $11／月と最も安い |
 | データベース | **RDS for PostgreSQL（db.t4g.micro）** | 月 $21 ほど増えるが、**自動バックアップが取れ、EC2 を作り直してもデータが残る**。スクール教材の構成にも合う。EC2 同居案との比較は 1.4 |
 | コンテナイメージの置き場 | **Amazon ECR（プライベート）** | EC2 上でビルドするとメモリ不足で失敗する。GitHub Actions でビルドして ECR に置き、EC2 は受け取るだけにする |
-| フロントエンド（React） | **未定**（本書では 12 章に選択肢を整理） | Issue #48 で別途決める。本書の手順はどちらを選んでも土台として使える |
+| フロントエンド（React） | **バックエンドに同梱**（1コンテナで配信） | 画面と API が同じドメインになり、CORS・CSRF の手当てが不要。インフラの変更も要らない（12章） |
 | 公開範囲 | **作業する PC の IP からのみアクセスを許可**（インターネットには公開しない） | **課題の指示による。** 公開範囲を狭めるほど攻撃されにくい（設定は 7.14） |
 | リージョン | **ap-northeast-1（東京）** | 日本から一番近く、遅延が小さい |
 | インフラの作り方 | **Terraform**（IaC） | 課題の指定。理由は 2.3 参照 |
@@ -1813,7 +1813,38 @@ terraform validate
 ## 8. 手順D-2：インフラを作る
 
 > **この章のゴール**
-> - AWS 上に VPC・EC2・ECR が作られ、`terraform output` で IP アドレスが表示される
+> - AWS 上にインフラ一式（VPC・EC2・RDS・ECR）が作られている
+> - **ネットワーク → サーバー → データベースの順に、1つずつ動作を確認できている**
+
+### 8.0 作るのは一度に、確認は段階ごとに
+
+[CLAUDE.md](../CLAUDE.md) 5章のとおり、新しい環境は**最小の単位で確かめながら**進めます。
+ただし今回は、**作るのは一度（`terraform apply` 1回）で、確認を段階に分けます。**
+
+#### なぜ作るのを分けないのか
+
+EC2 の起動スクリプトが RDS の接続先を埋め込んでいるため、
+Terraform は「RDS を作ってから EC2」という依存を判断します。
+そのため `-target=aws_instance.app` と指定しても RDS が一緒に作られ、
+**「EC2 だけ先に作る」ということができません。**
+
+これを分けるには変数でスイッチを設ける必要がありますが、今回は見送りました。
+代わりに **CLAUDE.md 5.4 のとおり、確認の順番だけを分けます。**
+作る順番は分けられなくても、**確かめる順番は分けられる**からです。
+
+#### 確認の順番
+
+**上から順に確認し、失敗したらそこで止まってください。** 先に進んでも原因が増えるだけです。
+
+| 段階 | 確認すること | 節 | 失敗したときに疑う場所 |
+|---|---|---|---|
+| **① ネットワーク** | VPC・サブネット・経路が意図どおりか | 8.3 | `network.tf` |
+| **② サーバー（EC2）** | SSM で入れるか。Docker とスワップが用意されたか | 8.4 | `ec2.tf`・`iam.tf`・`user_data.sh` |
+| **③ データベース（RDS）** | EC2 から接続できるか。外からは接続できないか | 8.5 | `rds.tf`・DB 用セキュリティグループ |
+| **④ アプリのデプロイ** | 起動するか。画面が出るか | 9章 | `backend/`・ECR・イメージ |
+
+> **この順番には意味があります。** ネットワークが通っていなければサーバーには入れず、
+> サーバーに入れなければデータベースの確認もできません。**土台から順に確かめます。**
 
 ### 8.1 plan を読む
 
@@ -1881,7 +1912,53 @@ ssm_connect_command = "aws ssm start-session --target i-0xxxxxxxxxxxxxxxx --regi
 
 **この出力をメモしてください。** 後でいつでも `terraform output` で再表示できます。
 
-### 8.3 作られたものを確認する
+### 8.3 ①ネットワークを確認する
+
+まず土台から確かめます。**ここが違っていると、この先すべてが動きません。**
+
+#### サブネット
+
+```powershell
+# サブネットが3つ（パブリック1・プライベート2）あるか。AZ が分かれているか
+aws ec2 describe-subnets --filters "Name=tag:Project,Values=taskboard" --query "Subnets[].{Name:Tags[?Key=='Name']|[0].Value,CIDR:CidrBlock,AZ:AvailabilityZone,AutoPublicIP:MapPublicIpOnLaunch}" --output table
+```
+
+| 項目 | 期待する状態 |
+|---|---|
+| サブネットの数 | 3つ（public × 1、private × 2） |
+| プライベートの AZ | **2つが別々の AZ** になっている（RDS の要件。7.8 参照） |
+| `AutoPublicIP` | public は `True`、private は `False` |
+
+#### 経路（ここが「パブリック／プライベート」を決める実体）
+
+```powershell
+aws ec2 describe-route-tables --filters "Name=tag:Project,Values=taskboard" --query "RouteTables[].{Name:Tags[?Key=='Name']|[0].Value,Routes:Routes[].DestinationCidrBlock}" --output table
+```
+
+| ルートテーブル | 期待する経路 |
+|---|---|
+| `taskboard-public-rt` | `10.0.0.0/16`（VPC 内）と **`0.0.0.0/0`（インターネット）** |
+| `taskboard-private-rt` | `10.0.0.0/16` **のみ**。`0.0.0.0/0` が**無い**こと |
+
+> **⚠️ プライベート側に `0.0.0.0/0` があったら、そこで止めてください。**
+> データベースがインターネットから届く状態になっています。
+
+#### ファイアウォール（セキュリティグループ）
+
+```powershell
+aws ec2 describe-security-groups --filters "Name=tag:Project,Values=taskboard" --query "SecurityGroups[].{Name:GroupName,Ingress:IpPermissions[].{Port:FromPort,FromIP:IpRanges[].CidrIp,FromSG:UserIdGroupPairs[].GroupId}}" --output json
+```
+
+| セキュリティグループ | 期待する受信ルール |
+|---|---|
+| `taskboard-app-sg` | 80番・443番が**自分の IP（`/32`）からのみ**。22番は無い |
+| `taskboard-db-sg` | 5432番が**アプリの SG からのみ**（`FromIP` ではなく `FromSG` で許可されている） |
+
+**ここまで問題なければ、次の段階へ進みます。**
+
+---
+
+### 8.4 ②サーバー（EC2）を確認する
 
 CLI で確認します（コンソールを開く必要はありません）。
 
@@ -1893,7 +1970,7 @@ aws ec2 describe-instances --filters "Name=tag:Project,Values=taskboard" --query
 aws ecr describe-repositories --query "repositories[].repositoryUri" --output table
 ```
 
-### 8.4 サーバーに入ってみる
+#### サーバーに入ってみる
 
 SSH 鍵なしで、SSM Session Manager でシェルに入れます。
 
@@ -1923,17 +2000,81 @@ free -h   # スワップが 2GB 作られていることを確認
 この時点ではまだ ECR にイメージを push していないので、`app` コンテナは起動に失敗しています。
 **コンテナが1つも動いていなくて正常です。** 次の章でイメージを送ります。
 
-データベース（RDS）への経路が通っているかは、次で確認できます。
+**この段階で確認すること**
 
-```bash
-# RDS の 5432番に到達できるか（接続が開けば OK）
-source /opt/taskboard/.env
-timeout 5 bash -c "</dev/tcp/$DB_HOST/$DB_PORT" && echo "RDS に到達できました"
+| 確認項目 | 期待する状態 | 見るところ |
+|---|---|---|
+| SSM で接続できる | シェルのプロンプトが出る | 失敗するなら `iam.tf` の SSM 権限 |
+| 初期設定が完走した | ログの末尾にエラーが無い | `/var/log/cloud-init-output.log` |
+| Docker が動いている | `docker ps` がエラーを返さない | `user_data.sh` の2章 |
+| スワップがある | `free -h` の Swap が 2.0Gi | `user_data.sh` の1章 |
+| 設定ファイルができている | `.env` に RDS の接続先が入っている | `sudo cat /opt/taskboard/.env` |
+
+この時点ではまだ ECR にイメージを push していないので、`app` コンテナは起動できません。
+**コンテナが1つも動いていなくて正常です。**
+
+`exit` でセッションを抜けます。**ここまで問題なければ、次の段階へ進みます。**
+
+---
+
+### 8.5 ③データベース（RDS）を確認する
+
+#### RDS が使える状態になっているか
+
+```powershell
+aws rds describe-db-instances --db-instance-identifier taskboard-db --query "DBInstances[0].{Status:DBInstanceStatus,Engine:EngineVersion,Class:DBInstanceClass,Public:PubliclyAccessible,Encrypted:StorageEncrypted,Backup:BackupRetentionPeriod,AZ:AvailabilityZone}" --output table
 ```
 
-`exit` でセッションを抜けます。
+| 項目 | 期待する値 |
+|---|---|
+| `Status` | `available`（`creating` ならまだ作成中。10分ほどかかる） |
+| `Public` | **`False`** |
+| `Encrypted` | `True` |
+| `Backup` | `7` |
 
-### 8.5 よくあるエラー
+#### EC2 から接続できるか（つながるべき経路）
+
+SSM でサーバーに入り、実際に接続します。
+
+```bash
+sudo dnf install -y postgresql17
+source /opt/taskboard/.env
+
+# バージョンを問い合わせる
+PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c 'SELECT version();'
+```
+
+PostgreSQL 17 のバージョン文字列が返れば成功です。
+**この時点ではテーブルは1つもありません**（Flyway がアプリ起動時に作るため）。
+
+#### 外から接続できないか（つながってはいけない経路）
+
+**セキュリティの確認は「つながること」と同じくらい「つながらないこと」が大事です。**
+手元の PowerShell から試します。
+
+```powershell
+# RDS のエンドポイントを確認
+terraform -chdir=infra/terraform output -raw db_endpoint
+
+# 名前解決できるか（プライベート IP が返る、または解決できない）
+Resolve-DnsName (terraform -chdir=infra/terraform output -raw db_endpoint).Split(":")[0] -ErrorAction SilentlyContinue
+
+# 接続を試す（失敗するのが正しい）
+Test-NetConnection -ComputerName (terraform -chdir=infra/terraform output -raw db_endpoint).Split(":")[0] -Port 5432
+```
+
+| 結果 | 判定 |
+|---|---|
+| `TcpTestSucceeded : False`（タイムアウト） | ✅ **正常。** 設計どおり外部から遮断されている |
+| `TcpTestSucceeded : True` | ❌ **異常。** `publicly_accessible` か経路の設定を見直す |
+
+> **時間がかかります**（タイムアウト待ちのため20秒ほど）。返ってこないのが正解です。
+
+**ここまで問題なければ、9章のデプロイに進みます。**
+
+---
+
+### 8.6 よくあるエラー
 
 | エラー | 原因と対処 |
 |---|---|
@@ -1943,7 +2084,7 @@ timeout 5 bash -c "</dev/tcp/$DB_HOST/$DB_PORT" && echo "RDS に到達できま�
 | `Error acquiring the state lock` | 前回の Terraform が異常終了した。`terraform force-unlock <ID>` （ID はエラーに表示される） |
 | apply が途中で失敗した | **失敗しても途中まで作られています。** 直してから `terraform apply` を再実行すれば、足りない分だけ作られます |
 
-### 8.6 （発展）tfstate を S3 に置く
+### 8.7 （発展）tfstate を S3 に置く
 
 今は `terraform.tfstate` が手元の PC にあります。学習用ならこれで十分ですが、次の弱点があります。
 
@@ -2453,37 +2594,64 @@ terraform apply
 
 ---
 
-## 12. フロントエンド（React）の配信：未決定
+## 12. フロントエンド（React）の配信：バックエンドに同梱する
 
-この部分は Issue #48 で別途決めます。選択肢を整理しておきます。
+**決定：`npm run build` の成果物を Spring Boot に同梱し、1つのコンテナで配信します**（案A）。
+Issue #48 はこれで決着です。
 
-| 案 | 内容 | 費用 | 長所 | 短所 |
-|---|---|---|---|---|
-| **A. バックエンドに同梱** | `npm run build` の成果物を Spring Boot の `src/main/resources/static/` に入れ、1コンテナで配信 | **追加 $0** | 最も簡単。画面と API が同じドメインなので CORS・CSRF の手当てが一切不要（[02 技術選定書 5.1](02_tech-stack.md) の前提を満たす） | CDN の速度向上が得られない。フロントだけの更新でもバックエンドを再デプロイする |
-| **B. S3 ＋ CloudFront** | 静的ファイルを S3 に置き、CloudFront で配信。`/api/*` を EC2 へ転送 | 月 $1 未満（S3 の保管量・転送量が小さいため） | 高速。AWS の王道構成を学べる。HTTPS が無料で付く | Terraform の記述が増える。キャッシュの扱いを理解する必要がある |
-| C. Amplify Hosting | Git 連携で自動ビルド・デプロイ | 月 $1 程度 | 設定が最も楽 | IaC で管理する意義が薄い |
+### 12.1 なぜ同梱にしたか
 
-> **スクール教材では S3 ＋ CloudFront を使わない**と解説されていました（代替案は未提示）。
-> そのため、どの案を選ぶかは引き続き**未決定**とします。以下は判断材料です。
+| 案 | 内容 | 費用 | 判定 |
+|---|---|---|---|
+| **A. バックエンドに同梱** | ビルド成果物を Spring Boot の `src/main/resources/static/` に入れ、1コンテナで配信 | **追加 $0** | **◯ 採用** |
+| B. S3 ＋ CloudFront | 静的ファイルを S3 に置き、CloudFront で配信。`/api/*` を EC2 へ転送 | 月 $1 未満 | ✕ 今回は見送り |
+| C. Amplify Hosting | Git 連携で自動ビルド・デプロイ | 月 $1 程度 | ✕ IaC で管理する意義が薄い |
 
-**技術的には B に利点があります。** 理由は次の3つです。
+**採用の理由**
 
-1. **HTTPS が無料で手に入る。** 今の構成（EC2 に直接 HTTP）では HTTPS にできず、
-   [02 技術選定書 5.1](02_tech-stack.md) で決めたセッション Cookie の `Secure` 属性が機能しません
-2. CloudFront で `/api/*` を EC2 に転送すれば、**画面と API が同じドメイン**になり、CORS・CSRF の追加実装が不要になります
-3. AWS らしい構成を学べ、課題の説明材料になります
+1. **まずシンプルな構成で動かすことを優先する。** 段階を1つずつ確かめながら進める方針（8.0）に合う。
+   配信経路が増えるほど、問題が起きたときの切り分けが難しくなる
+2. **画面と API が同じドメインになる。** CORS の許可設定も、CSRF トークンを画面側から読むための
+   手当ても**一切不要**になる（[02 技術選定書 5.1](02_tech-stack.md) が前提としている構成そのもの）
+3. **インフラの変更が要らない。** Terraform は今のままでよく、EC2 1台で完結する
+4. **スクール教材でも S3 ＋ CloudFront は使わない**と解説されていた
 
-ただし **A のほうが確実に早く動きます。** 締め切りが近い場合は A が無難です。
+### 12.2 この選択で諦めること
 
-**判断は保留します。** 教材で代替案が示された時点で、その内容と上表を突き合わせて決めてください。
+正直に書いておきます。
 
-> **B を選ぶ場合、7.14 の IP 制限とぶつかります。**
+| 諦めること | 影響 |
+|---|---|
+| **HTTPS にできない** | EC2 に直接 HTTP でつなぐため、セッション Cookie の `Secure` 属性が働かない。学習用かつアクセス元を自分の IP に限定しているため、今回は許容する |
+| CDN による高速化 | 利用者が自分だけなので影響はない |
+| 画面だけの更新でもバックエンドを再デプロイ | イメージを作り直して push し直す必要がある |
+
+将来 B に移行したくなった場合、**インフラ側の変更は「S3 ＋ CloudFront を足す」ことと、
+セキュリティグループの許可元を CloudFront に変えること**の2つです。
+アプリのコードはほぼそのまま使えます。
+
+> **B に移行する場合、7.14 の IP 制限とぶつかります。**
 > CloudFront は AWS 側のサーバーから EC2 へ通信するため、自分の IP だけを許可していると
 > **CloudFront からの通信が届かず、画面が表示できません。**
 > そのときは許可する送信元を「自分の IP」から「CloudFront からの通信のみ」に切り替えます
 > （`com.amazonaws.global.cloudfront.origin-facing` という AWS 管理のプレフィックスリストを使います）。
-> こうすると EC2 への直接アクセスがすべて遮断され、**必ず CloudFront を通る**形になるため、
-> 今より安全になります。その手順は B の採用が決まってから本書に追記します。
+
+### 12.3 実現方法（段階④で実施）
+
+インフラには影響しないため、**アプリのデプロイ（9章）と同じタイミング**で対応します。
+具体的な作業は次のとおりで、これは別の Issue として扱います。
+
+| やること | 内容 |
+|---|---|
+| フロントエンドをビルドする | `frontend/` で `npm run build` → `dist/` ができる |
+| Spring Boot に入れる | `dist/` の中身を `backend/src/main/resources/static/` に配置する |
+| 画面を返す経路を用意する | React Router を使うため、`/api/**` 以外のパスは `index.html` を返すようにする |
+| `Dockerfile` を直す | 1段目でフロントエンドもビルドするか、CI で作った `dist` を受け取る |
+| Spring Security の設定 | 静的ファイル（`/`、`/assets/**`）は認証なしで返す |
+
+> **注意：React Router を使っているため、`/boards/123` のような URL を直接開くと
+> Spring Boot が 404 を返します。** サーバー側に該当するパスが無いためです。
+> `/api/**` 以外は `index.html` を返す設定が必要になります。初見で必ずつまずく箇所です。
 
 ---
 
@@ -2565,6 +2733,7 @@ terraform apply
 
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.8 | 2026-09-29 | apply 後の動作確認を段階に分ける方針を追加。8.0 に「作るのは一度に、確認は段階ごとに」を新設し、8.3 ネットワーク・8.4 サーバー・8.5 データベースの確認手順を分けて記載（[CLAUDE.md](../CLAUDE.md) 5章のルール化に対応）。フロントエンド（React）の配信方法を「バックエンドに同梱」に決定し、12章を書き換え（#48 決着）| |
 | 0.7 | 2026-09-29 | データベースを「EC2 上の PostgreSQL コンテナ」から **RDS for PostgreSQL（db.t4g.micro）** に変更。自動バックアップが得られ、EC2 を作り直してもデータが残るようにするため。あわせてデータベース専用のプライベートサブネットを2つ新設し（RDS は 2AZ にまたがるサブネットグループを要求するため）、DB 用セキュリティグループは「アプリの SG からの 5432番のみ」に限定。判断の経緯を 1.3、RDS の設計意図を 7.8 として新設。費用試算・構成図・バックアップ手順（10.2）・運用パターン（10.4）を RDS 前提に書き換えた。12章は、教材が S3＋CloudFront を使わない方針と分かったため「未決定」に戻した | |
 | 0.6 | 2026-09-29 | アプリの公開範囲を「インターネット全体」から「作業する PC の IP のみ」に変更。`allowed_app_cidr` 変数を追加し、80番・443番のルールを `for_each` で生成する形に変更（未設定なら誰にも開かない）。グローバル IP の調べ方と、IP が変わったときの復旧手順として 7.13（現 7.14）を新設。13章に「昨日まで開けたのに開けない」等の症状を追加。12章に、CloudFront を採用する場合は IP 制限と両立しない点を追記 | |
 | 0.5 | 2026-09-29 | 手順A〜C の完了を反映。3.1 を「進捗状況」に改め、予算アラート $5・請求情報アクセス・アクセスキー・CLI 認証・疎通確認の完了を記録。5.5 に `aws configure` の後に続く AWS Agent Toolkit の2つの質問（skills・MCP サーバー）を追記し、どちらも `n` を選ぶ理由と、既定値が `Y` である点の注意を明記。13章に agent-toolkit のリージョン制約と文字コードのエラーを追加 | |
