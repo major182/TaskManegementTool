@@ -17,6 +17,13 @@ resource "aws_instance" "app" {
 
   # 初回起動時に実行するスクリプト。user_data.sh のテンプレートに値を埋め込む
   user_data = templatefile("${path.module}/user_data.sh", {
+    # 接続先は RDS のエンドポイント。
+    # aws_db_instance を参照しているため、Terraform は「RDS を作ってから EC2 を作る」
+    # 順番を自動で判断する
+    db_host      = aws_db_instance.main.address
+    db_port      = aws_db_instance.main.port
+    db_name      = aws_db_instance.main.db_name
+    db_user      = aws_db_instance.main.username
     db_password  = var.db_password
     aws_region   = var.aws_region
     ecr_registry = split("/", aws_ecr_repository.backend.repository_url)[0]

@@ -31,3 +31,8 @@ output "ssm_connect_command" {
   description = "サーバーのシェルに入るコマンド"
   value       = "aws ssm start-session --target ${aws_instance.app.id} --region ${var.aws_region}"
 }
+
+output "db_endpoint" {
+  description = "RDS のエンドポイント（EC2 の中からのみ接続できる）"
+  value       = aws_db_instance.main.endpoint
+}
