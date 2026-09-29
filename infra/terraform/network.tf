@@ -76,7 +76,7 @@ resource "aws_route_table_association" "public" {
 # （戻り用のルールを書く必要はない）
 resource "aws_security_group" "app" {
   name        = "${var.project_name}-app-sg"
-  description = "Application server: allow HTTP/HTTPS only"
+  description = "Application server: allow HTTP/HTTPS from allowed addresses only"
   vpc_id      = aws_vpc.main.id
 
   tags = {
@@ -85,20 +85,30 @@ resource "aws_security_group" "app" {
 }
 
 # インバウンド（入ってくる通信）：HTTP
+#
+# 0.0.0.0/0（全世界）ではなく、var.allowed_app_cidr に書いた送信元だけに許可する。
+# スクール課題のため一般公開する必要がなく、公開範囲を狭めるほど攻撃されにくくなるため。
+#
+# for_each に空のリストを渡すとルールが1つも作られない。
+# つまり allowed_app_cidr を設定しない限り、80番は誰にも開かない
 resource "aws_vpc_security_group_ingress_rule" "http" {
+  for_each = toset(var.allowed_app_cidr)
+
   security_group_id = aws_security_group.app.id
-  description       = "HTTP from the internet"
-  cidr_ipv4         = "0.0.0.0/0"
+  description       = "HTTP from an allowed address"
+  cidr_ipv4         = each.value
   from_port         = 80
   to_port           = 80
   ip_protocol       = "tcp"
 }
 
-# インバウンド：HTTPS（後で Let's Encrypt などを入れるとき用に開けておく）
+# インバウンド：HTTPS（後で Let's Encrypt などを入れるとき用。許可する送信元は HTTP と同じ）
 resource "aws_vpc_security_group_ingress_rule" "https" {
+  for_each = toset(var.allowed_app_cidr)
+
   security_group_id = aws_security_group.app.id
-  description       = "HTTPS from the internet"
-  cidr_ipv4         = "0.0.0.0/0"
+  description       = "HTTPS from an allowed address"
+  cidr_ipv4         = each.value
   from_port         = 443
   to_port           = 443
   ip_protocol       = "tcp"

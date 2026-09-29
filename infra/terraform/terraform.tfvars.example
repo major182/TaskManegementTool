@@ -11,6 +11,16 @@ aws_region   = "ap-northeast-1"
 #   -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
 db_password = "ここに実際のパスワードを入れる"
 
+# アプリ（80番・443番）へのアクセスを許可する送信元。
+# このプロジェクトはインターネット全体には公開せず、作業する PC からだけ届くようにします。
+#
+# 自分のグローバル IP の調べ方（PowerShell）:
+#   (Invoke-RestMethod https://checkip.amazonaws.com).Trim()
+#
+# 末尾の /32 は「このアドレス1つだけ」という意味です。
+# 空のままにすると、誰もアクセスできません（安全側の既定）。
+# 回線の IP は変わることがあります。つながらなくなったら調べ直してください（07_deployment.md 7.13）。
+allowed_app_cidr = ["203.0.113.10/32"]
+
 # SSH を許可する送信元。空のままなら 22番ポートは開きません（SSM Session Manager で接続するため）。
-# どうしても SSH したい場合のみ、自分のグローバル IP を指定します（例：["203.0.113.10/32"]）。
 # allowed_ssh_cidr = []

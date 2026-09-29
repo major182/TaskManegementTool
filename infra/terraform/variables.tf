@@ -55,6 +55,33 @@ variable "db_password" {
   }
 }
 
+variable "allowed_app_cidr" {
+  description = <<-EOT
+    アプリ（80番・443番）へのアクセスを許可する送信元のリスト。
+    スクール課題のため、インターネット全体には公開せず、作業する PC からだけ届くようにする。
+
+    既定は空リスト。空のままだと 80番・443番は誰にも開かない（安全側に倒している）。
+    値は terraform.tfvars に書く。tfvars は .gitignore で除外されているため、
+    自分のグローバル IP アドレスが GitHub に載ることはない。
+
+    書き方の例：["203.0.113.10/32"]
+      /32 は「この1つのアドレスだけ」という意味。
+
+    ★ 契約している回線のグローバル IP は、多くの場合ときどき変わる。
+      つながらなくなったら、まず現在の IP を調べ直して terraform apply をやり直すこと
+      （調べ方は docs/07_deployment.md 7.14）。
+  EOT
+  type        = list(string)
+  default     = []
+
+  validation {
+    # "/" が入っていない（= /32 などを書き忘れた）指定をはじく。
+    # 例："203.0.113.10" と書くと AWS 側でエラーになるため、ここで先に気づけるようにする
+    condition     = alltrue([for c in var.allowed_app_cidr : can(regex("/", c))])
+    error_message = "allowed_app_cidr は CIDR 表記で書いてください（例：203.0.113.10/32）。"
+  }
+}
+
 variable "allowed_ssh_cidr" {
   description = <<-EOT
     SSH（22番ポート）を許可する送信元。
