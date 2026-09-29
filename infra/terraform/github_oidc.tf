@@ -34,11 +34,22 @@ data "aws_iam_policy_document" "github_assume_role" {
     }
 
     # ★重要★ このリポジトリからの実行だけに限定する。
-    # ここを緩めると、他人のリポジトリから自分の AWS を操作できてしまう
+    # ここを緩めると、他人のリポジトリから自分の AWS を操作できてしまう。
+    #
+    # GitHub が送ってくる識別子は、名前だけでなく数値 ID を含む形式になっている。
+    #   repo:<オーナー名>@<オーナーID>/<リポジトリ名>@<リポジトリID>:ref:refs/heads/main
+    #
+    # 多くの解説記事は名前だけの形式（repo:owner/repo:*）で書かれているが、
+    # それでは一致せず認証が拒否される（#69 で実際に踏んだ）。
+    #
+    # ID で照合するほうが安全でもある。名前は変更できるため、名前だけで許可すると
+    # 変更後に同じ名前を第三者が取得してなりすませる余地が残る。ID は変わらない
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:*"]
+      values = [
+        "repo:${split("/", var.github_repository)[0]}@${var.github_owner_id}/${split("/", var.github_repository)[1]}@${var.github_repository_id}:*",
+      ]
     }
   }
 }
