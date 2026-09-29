@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.9（ドラフト） |
+| ドキュメント版数 | 1.0（ドラフト） |
 | 作成日 | 2026-09-27 |
 | 最終更新日 | 2026-09-29 |
 | 作成者 | （氏名） |
@@ -2240,6 +2240,7 @@ aws s3api put-bucket-versioning --bucket "taskboard-tfstate-$accountId" --versio
 
 `backend/Dockerfile` は Gradle でビルドする2段構えになっています。
 しかし **t3.micro（メモリ 1GB）では Gradle のビルドがメモリ不足で失敗します。**
+画面（React）のビルドも同じイメージの中で行うため、なおさらです。
 
 そこで、**ビルドは GitHub Actions（無料）で行い、出来上がったイメージだけを ECR 経由で EC2 に届けます。**
 これは実務でも標準的な形（ビルドと実行の分離）です。
@@ -2269,15 +2270,25 @@ echo $ecrUrl
 # 2. Docker を ECR にログインさせる
 aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin $registry
 
-# 3. イメージをビルドする（backend フォルダを対象にする）
+# 3. イメージをビルドする
+#    ★リポジトリ直下（末尾の ".")で実行する。画面とサーバーの両方をビルド範囲に含めるため
 #    --platform を指定する理由：EC2 は x86_64。Windows の Docker も既定で x86_64 だが、明示しておくと安全
-docker build --platform linux/amd64 -t "${ecrUrl}:latest" ./backend
+docker build --platform linux/amd64 -t "${ecrUrl}:latest" .
 
-# 4. ECR に送る
+# 4. 戻せるように、コミット単位のタグも付けておく
+$sha = (git rev-parse --short HEAD)
+docker tag "${ecrUrl}:latest" "${ecrUrl}:${sha}"
+
+# 5. ECR に送る
 docker push "${ecrUrl}:latest"
+docker push "${ecrUrl}:${sha}"
 ```
 
-ビルドには5〜10分かかります（Gradle の依存ダウンロードのため）。
+ビルドには5〜10分かかります（npm と Gradle の依存ダウンロードのため）。2回目以降はキャッシュが効いて速くなります。
+
+> **`latest` だけでなくコミット単位のタグも push する理由**は、**戻せるようにするため**です。
+> デプロイ後に不具合が見つかったら、EC2 の `/opt/taskboard/.env` の `ECR_IMAGE` を
+> 前のコミットのタグに書き換えて `docker compose up -d` すれば、以前の状態に戻せます。
 
 ### 9.3 EC2 に新しいイメージを取り込ませる
 
@@ -2306,12 +2317,18 @@ Flyway がテーブルを自動で作るログも見えるはずです。
 terraform -chdir=infra/terraform output -raw app_url
 ```
 
-表示された URL に `/swagger-ui.html` を付けてブラウザで開きます。
-Swagger UI が表示されれば、**デプロイ成功です。**
+**まず死活確認から**行います。画面より先に、サーバーが起きているかを確かめます。
 
+```powershell
+curl.exe http://＜IP＞/actuator/health
+# {"status":"UP"} が返れば、アプリは起動している
 ```
-http://54.xxx.xxx.xxx/swagger-ui.html
-```
+
+次にブラウザで URL をそのまま開きます。**ログイン画面が表示されれば、デプロイ成功です。**
+
+> **Swagger UI は本番では開きません。**
+> [04 API設計書](04_api-design.md) 6章の方針により、`springdoc` は `local` プロファイルでのみ
+> 有効にしてあります。`/swagger-ui.html` は 404 になりますが、**これは正常です。**
 
 > **開けないときは、まずアクセス元を疑ってください。**
 > 7.14 のとおり、`terraform.tfvars` に書いた IP からしか届きません。
@@ -2334,7 +2351,72 @@ free -h
 sudo docker stats --no-stream
 ```
 
-### 9.5 GitHub Actions で自動化する
+### 9.5 デプロイの記録（2026-09-29）
+
+初回デプロイの結果です。
+
+| 段階 | 結果 |
+|---|---|
+| ローカルで `./gradlew check` | ✅ 成功 |
+| ローカルで `npm run check`（テスト147件） | ✅ 成功 |
+| `docker build`（3段構成） | ✅ 成功。イメージ 63MB |
+| jar に画面が入っているか | ✅ `BOOT-INF/classes/static/` に index.html・assets・svg |
+| ローカル起動 → `/` が 200/html | ✅ |
+| ローカル起動 → `/api/*` が未ログインで 401 | ✅ |
+| ローカルでログイン → 再アクセス | ✅ `SameSite=Lax`・`Secure` なし |
+| ECR に push | ✅ `latest` と コミット短縮 SHA の2タグ |
+| EC2 で起動 | ✅ `Started TaskboardApplication in 16.779 seconds` |
+| Flyway | ✅ V1・V2 が `success = t`。テーブル5つ作成 |
+| アプリのエラーログ | ✅ 0件 |
+| 本番で新規登録 → ログイン → ボード作成 | ✅ すべて 2xx |
+
+> **EC2 を作り直した直後、イメージが ECR にあれば初期設定スクリプトが自動で起動します。**
+> `user_data.sh` の最後で `docker compose pull && up -d` を実行しているためです。
+> 今回は EC2 の初期設定中に push が終わっていたため、手動の `docker compose pull` は不要でした。
+
+#### 2回目以降のデプロイ手順
+
+コードを直したら、次の2ステップで反映できます。
+
+```powershell
+# 1. ビルドして push（リポジトリ直下で実行）
+$ecrUrl = (terraform -chdir=infra/terraform output -raw ecr_repository_url)
+$registry = $ecrUrl.Split("/")[0]
+$sha = (git rev-parse --short HEAD)
+aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin $registry
+docker build --platform linux/amd64 -t "${ecrUrl}:latest" -t "${ecrUrl}:${sha}" .
+docker push "${ecrUrl}:latest"
+docker push "${ecrUrl}:${sha}"
+```
+
+```powershell
+# 2. EC2 に反映（対話シェルを使わず、コマンドを送り込む）
+$iid = (terraform -chdir=infra/terraform output -raw instance_id)
+$cmd = aws ssm send-command --instance-ids $iid --region ap-northeast-1 `
+  --document-name "AWS-RunShellScript" `
+  --parameters 'commands=["cd /opt/taskboard","aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin $(grep ECR_IMAGE .env | cut -d= -f2 | cut -d/ -f1)","docker compose pull","docker compose up -d","docker image prune -f","sleep 20","curl -sf http://localhost:80/actuator/health"]' `
+  --query "Command.CommandId" --output text
+
+aws ssm get-command-invocation --command-id $cmd --instance-id $iid --region ap-northeast-1 `
+  --query "{Status:Status,Out:StandardOutputContent}"
+```
+
+`docker image prune -f` を入れているのは、**古いイメージでディスクが埋まるのを防ぐ**ためです。
+t3.micro のディスクは 20GB で、イメージ1つが約 300MB あります。
+
+#### 動かなくなったときの戻し方
+
+コミット単位のタグを push してあるので、**前の状態に戻せます。**
+
+```bash
+# EC2 の中で、使うイメージを前のタグに書き換える
+sudo sed -i "s|taskboard-backend:latest|taskboard-backend:＜戻したいSHA＞|" /opt/taskboard/.env
+cd /opt/taskboard && sudo docker compose up -d
+```
+
+---
+
+### 9.6 GitHub Actions で自動化する
 
 手順が通ったら、`main` にマージされたときに自動で ECR へ push されるようにします。
 
@@ -2735,9 +2817,33 @@ Issue #48 はこれで決着です。
 
 | 諦めること | 影響 |
 |---|---|
-| **HTTPS にできない** | EC2 に直接 HTTP でつなぐため、セッション Cookie の `Secure` 属性が働かない。学習用かつアクセス元を自分の IP に限定しているため、今回は許容する |
+| **HTTPS にできない** | 通信が暗号化されない。学習用かつアクセス元を自分の IP に限定しているため、今回は許容する |
 | CDN による高速化 | 利用者が自分だけなので影響はない |
 | 画面だけの更新でもバックエンドを再デプロイ | イメージを作り直して push し直す必要がある |
+
+#### ⚠️ HTTPS でないと、設定を変えないとログインできません
+
+[02 技術選定書 5.1](02_tech-stack.md) の決定にしたがい、セッション Cookie には
+`Secure`（HTTPS でのみ送る）と `SameSite=None`（別サイトからでも送る）が付いていました。
+**この設定のままでは HTTP 公開でログインが維持できません。**
+
+| 属性 | 何が起きるか |
+|---|---|
+| `Secure` | ブラウザが **HTTPS でない通信では Cookie を保存も送信もしない**。ログインは成功するが、次のリクエストで 401 になる |
+| `SameSite=None` | そもそも **`Secure` とセットでないとブラウザに拒否される** |
+
+そこで `application.yml` を環境変数で切り替えられるようにしました。
+
+```yaml
+        same-site: ${SESSION_COOKIE_SAME_SITE:lax}
+        secure: ${SESSION_COOKIE_SECURE:true}
+```
+
+**既定値は安全側（`secure: true`）のまま**にし、EC2 側の `.env` で `SESSION_COOKIE_SECURE=false` を渡しています。
+設定を忘れた環境が勝手に緩くなることはありません。**HTTPS 化したら、この環境変数を外すだけで元に戻ります。**
+
+なお `SameSite` を `lax` にできるのは、**画面と API を同じサーバーから配るようになったため**です。
+`None` が必要だったのは、画面を別ドメインに置く前提だったときの名残です。
 
 将来 B に移行したくなった場合、**インフラ側の変更は「S3 ＋ CloudFront を足す」ことと、
 セキュリティグループの許可元を CloudFront に変えること**の2つです。
@@ -2749,22 +2855,52 @@ Issue #48 はこれで決着です。
 > そのときは許可する送信元を「自分の IP」から「CloudFront からの通信のみ」に切り替えます
 > （`com.amazonaws.global.cloudfront.origin-facing` という AWS 管理のプレフィックスリストを使います）。
 
-### 12.3 実現方法（段階④で実施）
+### 12.3 実現方法
 
-インフラには影響しないため、**アプリのデプロイ（9章）と同じタイミング**で対応します。
-具体的な作業は次のとおりで、これは別の Issue として扱います。
+**インフラには影響しません。** Terraform の変更は不要で、アプリ側の作りを変えるだけです。
 
-| やること | 内容 |
+#### やったこと
+
+| やること | 実際の対応 |
 |---|---|
-| フロントエンドをビルドする | `frontend/` で `npm run build` → `dist/` ができる |
-| Spring Boot に入れる | `dist/` の中身を `backend/src/main/resources/static/` に配置する |
-| 画面を返す経路を用意する | React Router を使うため、`/api/**` 以外のパスは `index.html` を返すようにする |
-| `Dockerfile` を直す | 1段目でフロントエンドもビルドするか、CI で作った `dist` を受け取る |
-| Spring Security の設定 | 静的ファイル（`/`、`/assets/**`）は認証なしで返す |
+| 画面をビルドする | `Dockerfile` の1段目（`node:24-alpine`）で `npm run build` を実行する |
+| Spring Boot に入れる | 2段目で `dist/` を `src/main/resources/static/` にコピーする。ここに置いたものは jar の中から `/` で配信される |
+| 静的ファイルを認証なしで通す | `SecurityConfig` の許可リストに `/`・`/index.html`・`/assets/**`・`/favicon.svg`・`/icons.svg` を追加する |
+| Cookie の設定 | 12.2 のとおり `SESSION_COOKIE_SECURE=false` を渡す |
 
-> **注意：React Router を使っているため、`/boards/123` のような URL を直接開くと
-> Spring Boot が 404 を返します。** サーバー側に該当するパスが無いためです。
-> `/api/**` 以外は `index.html` を返す設定が必要になります。初見で必ずつまずく箇所です。
+**`Dockerfile` はリポジトリ直下に置いています。** 画面とサーバーの両方をビルド範囲に含める必要があるためです
+（`backend/` の中に置くと `frontend/` が見えません）。ビルドもリポジトリ直下で実行します。
+
+```powershell
+docker build -t taskboard-backend .
+```
+
+> **`.dockerignore` で `infra/` を必ず除外してください。**
+> `infra/terraform/terraform.tfstate` には **RDS のパスワードが平文で入っています。**
+> ビルド範囲に含めると、イメージの履歴から読み取れてしまう可能性があります。
+
+#### ⚠️ SPA フォールバックは実装していません
+
+多くの解説記事には「React の SPA を配信するときは、どのパスでも `index.html` を返す設定が必要」と書かれています。
+**このプロジェクトでは不要です。**
+
+理由は、画面遷移が **URL を変えない方式**で作られているためです。
+`frontend/src/App.tsx` は History API を次のように呼んでいます。
+
+```ts
+window.history.pushState(BOARD_HISTORY_STATE, '')
+```
+
+**第3引数（URL）を省略しています。** このとき仕様上アドレスは変わらないため、
+ブラウザの URL は常に `/` のままです。再読み込みしても、ブックマークしても、
+リンクを共有しても `/` に届き、`index.html` がそのまま返ります。
+
+むしろフォールバックを入れると、**`/api` の打ち間違いによる 404 まで `index.html` にすり替えてしまいます。**
+画面側は JSON（problem+json）が返る前提でエラーを処理しているため、有害です。
+
+> 将来 react-router を導入して URL が `/` 以外にもなったときは、そのとき追加します。
+> その場合の最小の実装は、**ドットを含まない1階層のパスだけ**を転送するものになります
+> （`/api/...` や `/assets/x.js` を巻き込まないため）。
 
 ---
 
@@ -2849,6 +2985,7 @@ Issue #48 はこれで決着です。
 
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 1.0 | 2026-09-29 | **アプリのデプロイを完了。** 画面（React）を jar に同梱する実装を反映し、12.3 を実際の手順に書き換え。調査の結果 **react-router は使われておらず URL が常に `/` のまま**と判明したため、「ディープリンクで 404 になる」という記述を訂正し、SPA フォールバックを実装しない理由を明記。HTTP 公開ではセッション Cookie の `Secure` / `SameSite=None` によりログインが維持できない問題と対処を 12.2 に追記。Swagger は本番で無効のため、9.4 の確認方法を `/actuator/health` と実画面に変更。9.5 にデプロイの記録と2回目以降の手順・戻し方を新設 | |
 | 0.9 | 2026-09-29 | 初回の `terraform apply` を実施し、その結果を反映。**新方式の無料プランには機能面の制限もある**ことが分かったため 1.3 に追記（RDS のバックアップ保持日数は 1日まで、EC2 は t2.micro が対象外）。インスタンスタイプを t3.micro、保持日数を 1日に変更し、費用の記載も更新。構築・動作確認の結果を 8.6 に記録 | |
 | 0.8 | 2026-09-29 | apply 後の動作確認を段階に分ける方針を追加。8.0 に「作るのは一度に、確認は段階ごとに」を新設し、8.3 ネットワーク・8.4 サーバー・8.5 データベースの確認手順を分けて記載（[CLAUDE.md](../CLAUDE.md) 5章のルール化に対応）。フロントエンド（React）の配信方法を「バックエンドに同梱」に決定し、12章を書き換え（#48 決着）| |
 | 0.7 | 2026-09-29 | データベースを「EC2 上の PostgreSQL コンテナ」から **RDS for PostgreSQL（db.t4g.micro）** に変更。自動バックアップが得られ、EC2 を作り直してもデータが残るようにするため。あわせてデータベース専用のプライベートサブネットを2つ新設し（RDS は 2AZ にまたがるサブネットグループを要求するため）、DB 用セキュリティグループは「アプリの SG からの 5432番のみ」に限定。判断の経緯を 1.3、RDS の設計意図を 7.8 として新設。費用試算・構成図・バックアップ手順（10.2）・運用パターン（10.4）を RDS 前提に書き換えた。12章は、教材が S3＋CloudFront を使わない方針と分かったため「未決定」に戻した | |
