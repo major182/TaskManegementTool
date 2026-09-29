@@ -42,11 +42,22 @@ variable "private_subnet_cidrs" {
 
 variable "instance_type" {
   description = <<-EOT
-    EC2 のサイズ。t2.micro はメモリが 1GB しかないため、
-    user_data.sh でスワップ領域を 2GB 追加している（JVM と PostgreSQL を同居させるため）。
+    EC2 のサイズ。メモリが 1GB しかないため、user_data.sh でスワップ領域を 2GB 追加している。
+
+    t2.micro ではなく t3.micro にしているのは、AWS の無料プラン（新方式のクレジット付与型）が
+    対象のインスタンスタイプを限定しており、t2.micro が含まれていないため。
+    t2.micro を指定すると次のエラーで作成に失敗する。
+
+      InvalidParameterCombination: The specified instance type is not eligible for Free Tier.
+
+    使える種類は次のコマンドで確認できる。
+      aws ec2 describe-instance-types --filters "Name=free-tier-eligible,Values=true"
+
+    t3.micro は t2.micro より安く（$0.0136/時 対 $0.0152/時）、メモリは同じ 1GB。
+    メモリが足りない場合は t3.small（2GB、$0.0272/時）に変更できる。
   EOT
   type        = string
-  default     = "t2.micro"
+  default     = "t3.micro"
 }
 
 variable "root_volume_size" {
@@ -77,9 +88,19 @@ variable "db_allocated_storage" {
 }
 
 variable "db_backup_retention_days" {
-  description = "自動バックアップの保持日数。0 にすると自動バックアップが無効になるため 1 以上にする"
+  description = <<-EOT
+    自動バックアップの保持日数。0 にすると自動バックアップが無効になるため 1 以上にする。
+
+    既定を 1 にしているのは、AWS の無料プラン（新方式のクレジット付与型）に
+    保持日数の上限があるため。7 を指定すると次のエラーで作成に失敗する。
+
+      FreeTierRestrictionError: The specified backup retention period
+      exceeds the maximum available to free tier customers.
+
+    有料プランにアップグレードすれば、より長い保持日数を指定できる。
+  EOT
   type        = number
-  default     = 7
+  default     = 1
 
   validation {
     condition     = var.db_backup_retention_days >= 1
