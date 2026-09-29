@@ -20,14 +20,15 @@ resource "aws_instance" "app" {
     # 接続先は RDS のエンドポイント。
     # aws_db_instance を参照しているため、Terraform は「RDS を作ってから EC2 を作る」
     # 順番を自動で判断する
-    db_host      = aws_db_instance.main.address
-    db_port      = aws_db_instance.main.port
-    db_name      = aws_db_instance.main.db_name
-    db_user      = aws_db_instance.main.username
-    db_password  = var.db_password
-    aws_region   = var.aws_region
-    ecr_registry = split("/", aws_ecr_repository.backend.repository_url)[0]
-    ecr_image    = "${aws_ecr_repository.backend.repository_url}:latest"
+    db_host = aws_db_instance.main.address
+    db_port = aws_db_instance.main.port
+    db_name = aws_db_instance.main.db_name
+    db_user = aws_db_instance.main.username
+    # パスワードそのものは渡さない。取りに行く先だけを渡す（rds.tf のコメント参照）
+    db_password_parameter = aws_ssm_parameter.db_password.name
+    aws_region            = var.aws_region
+    ecr_registry          = split("/", aws_ecr_repository.backend.repository_url)[0]
+    ecr_image             = "${aws_ecr_repository.backend.repository_url}:latest"
   })
 
   # user_data を変更したらインスタンスを作り直す。

@@ -42,3 +42,28 @@ resource "aws_iam_instance_profile" "ec2" {
   name = "${var.project_name}-ec2-profile"
   role = aws_iam_role.ec2.name
 }
+
+# ---------- パラメータストアからパスワードを読む権限 ----------
+# 読めるのは、このプロジェクトのパラメータ1つだけに限定する。
+# SecureString は暗号化されているため、復号（kms:Decrypt）の権限もあわせて必要になる
+data "aws_iam_policy_document" "read_db_password" {
+  statement {
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.db_password.arn]
+  }
+
+  statement {
+    actions = ["kms:Decrypt"]
+    # パラメータストアが既定で使う、AWS 管理の鍵
+    resources = ["arn:aws:kms:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alias/aws/ssm"]
+  }
+}
+
+resource "aws_iam_role_policy" "read_db_password" {
+  name   = "${var.project_name}-read-db-password"
+  role   = aws_iam_role.ec2.id
+  policy = data.aws_iam_policy_document.read_db_password.json
+}
+
+# 自分のアカウント ID を知るために使う
+data "aws_caller_identity" "current" {}

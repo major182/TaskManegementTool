@@ -3,7 +3,7 @@
 # EC2 の中でコンテナとして動かす案と比べ、月 $21 ほど高くなるが、次の利点がある。
 #   - 自動バックアップが取られ、特定時点に戻せる（EC2 上のコンテナには無い）
 #   - EC2 を作り直したり destroy したりしても、データが消えない
-#   - メモリを EC2 と奪い合わない（t2.micro は 1GB しかない）
+#   - メモリを EC2 と奪い合わない（EC2 は t3.micro でメモリが 1GB しかない）
 # スクール教材の構成に合わせるという意図もある（docs/02_tech-stack.md 3.4）。
 
 # ---------- DB サブネットグループ ----------
@@ -107,5 +107,26 @@ resource "aws_db_instance" "main" {
     # final_snapshot_identifier に timestamp() を使っているため、
     # 何もしていなくても毎回差分が出てしまう。それを無視する
     ignore_changes = [final_snapshot_identifier]
+  }
+}
+
+# ---------- パスワードの受け渡し ----------
+# EC2 にパスワードを渡す方法として、起動スクリプト（user_data）に直接書く手もあるが、
+# user_data は次のコマンドで誰でも読み出せてしまう。
+#
+#   aws ec2 describe-instance-attribute --instance-id <ID> --attribute userData
+#
+# ec2:DescribeInstanceAttribute の権限を持つ人に、そのままパスワードが渡ることになる。
+# そこでパラメータストアに暗号化して預け、EC2 は起動時に自分の権限で取りに行く形にする。
+# 標準のパラメータストアは無料で使える。
+resource "aws_ssm_parameter" "db_password" {
+  name = "/${var.project_name}/db/password"
+  # SecureString は AWS が管理する鍵で暗号化して保存する形式
+  type        = "SecureString"
+  value       = var.db_password
+  description = "RDS の taskboard ユーザーのパスワード。EC2 が起動時に取得する"
+
+  tags = {
+    Name = "${var.project_name}-db-password"
   }
 }

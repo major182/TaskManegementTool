@@ -27,6 +27,20 @@ fi
 # ---------- 2. Docker を入れて起動する ----------
 dnf update -y
 dnf install -y docker
+
+# ログを放っておくと際限なく増え、20GB のディスクが埋まって docker pull が失敗する。
+# 1ファイル 10MB × 3世代（最大 30MB）で古いものから捨てる設定を、起動前に入れておく
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<'DAEMONFILE'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DAEMONFILE
+
 systemctl enable --now docker
 
 # ec2-user が sudo なしで docker を使えるようにする
@@ -42,6 +56,11 @@ chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 # ---------- 4. アプリの置き場と設定ファイルを作る ----------
 mkdir -p /opt/taskboard
 
+# パスワードはパラメータストアから取りに行く。
+# 起動スクリプトに直接書くと、describe-instance-attribute で誰でも読めてしまうため
+# （理由は rds.tf のコメント）。ここは EC2 に付けた権限（iam.tf）で取得できる
+DB_PASSWORD_VALUE=$(aws ssm get-parameter   --name "${db_password_parameter}"   --with-decryption   --region ${aws_region}   --query "Parameter.Value"   --output text)
+
 # 環境変数ファイル。compose.yaml から読まれる。
 # 600 にして、root 以外からは読めないようにする
 cat > /opt/taskboard/.env <<ENVFILE
@@ -53,7 +72,7 @@ DB_NAME=${db_name}
 # ここから下はアプリ（application.yml）がそのまま読む名前に合わせている
 DB_URL=jdbc:postgresql://${db_host}:${db_port}/${db_name}
 DB_USERNAME=${db_user}
-DB_PASSWORD=${db_password}
+DB_PASSWORD=$DB_PASSWORD_VALUE
 
 # HTTPS ではないため、Secure 属性を付けない。
 # 付けるとブラウザがセッション Cookie を保存せず、ログインが維持できない。
@@ -71,6 +90,15 @@ services:
   app:
     image: $${ECR_IMAGE}
     restart: always
+    # 死活確認。起動に失敗したときだけでなく、応答しなくなったときも気づけるようにする。
+    # restart: always は「落ちたとき」しか効かないため、これが無いと固まったまま放置される
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # 起動には20秒ほどかかる。その間の失敗は数えない
+      start_period: 60s
     environment:
       # 接続先は RDS のエンドポイント。値は .env から読まれる。
       # 変数名は application.yml が読むものに合わせてある
