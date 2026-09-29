@@ -10,7 +10,13 @@
 #   Node も Gradle も本番のイメージには残らないため、大きさと危険が減る。
 #
 # ビルドはリポジトリのルートで実行する（backend/ ではない）:
-#   docker build -t taskboard-backend .
+#   docker build --provenance=false --sbom=false -t taskboard-backend .
+#
+# --provenance=false を付ける理由：
+#   付けないと Docker が「署名情報付き」の形式で push し、
+#   ECR の脆弱性スキャンがイメージを読めずに結果が出ない。
+#   設定はあるのに検査されていない状態になるため、必ず付ける
+#   （docs/07_deployment.md 9.2）。
 
 # --- 1段目：画面（React）をビルドする ---
 # Node の版数は CI（.github/workflows/ci.yml）と揃える
