@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.9（ドラフト） |
+| ドキュメント版数 | 0.10（ドラフト） |
 | 作成日 | 2026-09-17 |
-| 最終更新日 | 2026-09-23 |
+| 最終更新日 | 2026-09-29 |
 | 作成者 | （氏名） |
 | ステータス | レビュー待ち |
 
@@ -104,10 +104,15 @@ TaskManegementTool/
 | エディタ | IntelliJ IDEA Community Edition（Java）／VS Code（React） | Java は IntelliJ の補完・デバッグが強い。VS Code 1本にまとめる場合は Extension Pack for Java を入れる |
 | ソース管理 | Git / GitHub | 現場では必ず使う |
 | CI | GitHub Actions | push のたびにビルドとテストを自動で動かせる。GitHub と同じ場所で完結する。設定は `.github/workflows/ci.yml`（v0.8 で作成）。PR ごとにフロントエンドの `npm run check`・`npm run build` と、バックエンドの `./gradlew check` を実行する |
-| 公開先 | **AWS**（使用するサービスは指定待ち） | 課題の指定により AWS を使う。どのサービスで動かすかは未定（[Issue #48](https://github.com/major182/TaskManegementTool/issues/48)）。候補は次のとおり（v0.9 で Vercel / Render / Neon から変更） |
-| ┗ 画面（React） | S3 ＋ CloudFront ／ Amplify Hosting ／ バックエンドに同梱 | 静的ファイルを HTTPS で配信できればよい。**CloudFront で `/api/*` を API へ転送するか、バックエンドに同梱すると、画面と API が同じドメインになり、CORS と CSRF の面倒がなくなる** |
-| ┗ API（Spring Boot） | App Runner ／ ECS (Fargate) ＋ ALB ／ EC2 | コンテナで動かす前提で `backend/Dockerfile` を用意済み。待ち受けポートは環境変数 `PORT` で受け取る |
-| ┗ データベース | RDS for PostgreSQL | 本番と開発で同じ PostgreSQL を使う。接続情報は環境変数で渡す |
+| 公開先 | **AWS**（東京リージョン） | 課題の指定により AWS を使う。手順とサービスの選定理由は [07 デプロイ手順書](07_deployment.md)（v0.10 で確定。v0.9 で Vercel / Render / Neon から変更） |
+| ┗ インフラの構築方法 | **Terraform（IaC）＋ AWS CLI** | 課題の指定。構成をコードで管理することで、再現・レビュー・一括削除ができる。コードは `infra/terraform/` |
+| ┗ API（Spring Boot） | **EC2（t2.micro）上の Docker** | コンテナで動かす前提で `backend/Dockerfile` を用意済み。待ち受けポートは環境変数 `PORT` で受け取る。App Runner・ECS (Fargate) ＋ ALB は月 $25 前後かかるため、付与クレジットの範囲に収まる EC2（月 $11 前後）を選んだ |
+| ┗ データベース | **同じ EC2 上の PostgreSQL 17 コンテナ** | RDS は最小構成でも月 $13 程度かかり、学習用としては割に合わない。開発で使う `compose.yaml` をほぼそのまま使えるため、開発と本番の差も小さい。**自動バックアップと冗長化が無い点は割り切る**（[07 デプロイ手順書 2.7](07_deployment.md)） |
+| ┗ コンテナイメージの置き場 | **Amazon ECR（プライベート）** | t2.micro（メモリ 1GB）では Gradle のビルドが失敗するため、GitHub Actions でビルドして ECR に置き、EC2 は取得するだけにする |
+| ┗ 公開範囲 | **作業する PC の IP からのみ許可**（インターネットには公開しない） | スクール課題であり不特定多数に見せる必要がない。公開範囲を狭めれば、アプリ側に不備があっても外から到達されない（多層防御）。設定は [07 デプロイ手順書 7.13](07_deployment.md) |
+| ┗ EC2 への接続方法 | **SSM Session Manager** | SSH の鍵と 22番ポートが不要になり、鍵の管理と公開範囲の両方を減らせる |
+| ┗ CI から AWS への認証 | **GitHub OIDC**（アクセスキーを保存しない） | 永続的なアクセスキーを GitHub に預けずに済む。権限は ECR への push のみに絞る |
+| ┗ 画面（React） | **未定** | S3 ＋ CloudFront ／ バックエンドに同梱 の2案。**CloudFront で `/api/*` を API へ転送するか、バックエンドに同梱すると、画面と API が同じドメインになり、CORS と CSRF の面倒がなくなる**（[Issue #48](https://github.com/major182/TaskManegementTool/issues/48)、[07 デプロイ手順書 12章](07_deployment.md)） |
 
 ### 3.5 実装時に確定したバージョン（2026-09-20）
 
@@ -190,6 +195,7 @@ TaskManegementTool/
 ## 改訂履歴
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.10 | 2026-09-29 | 3.4 公開先を確定。API は EC2 上の Docker、DB は同じ EC2 上の PostgreSQL コンテナ、イメージ置き場は ECR とし、インフラは Terraform（IaC）で構築する方針を明記。App Runner・ECS・RDS を選ばなかった理由（費用）も記載。手順は [07 デプロイ手順書](07_deployment.md) を新規作成。アプリの公開範囲は作業する PC の IP のみとした。画面（React）の配信方法は引き続き未定（#48） | |
 | 0.9 | 2026-09-23 | 公開先を AWS に変更（課題の指定）。2 システム構成図・3.4 公開先・5.1 の注意を書き換え、画面と API を同じドメインで配信する方針を追記 | |
 | 0.8 | 2026-09-22 | 静的チェックを導入。バックエンドに Spotless・Checkstyle を追加し、oxlint のルールを強化。CI（GitHub Actions）を作成 | |
 | 0.7 | 2026-09-20 | 実装開始にあたり、3.5「実装時に確定したバージョン」を追加。コード整形・チェックを ESLint から oxlint に変更（Vite テンプレートの既定に合わせた） | |
