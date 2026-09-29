@@ -38,8 +38,12 @@ server:
         # サーバー側の timeout だけでは F-08 を満たせない
         max-age: 30d
         http-only: true
-        same-site: none
-        secure: true
+        # 画面（React）は jar に同梱して同じサーバーから配るため、別サイト扱いにする必要がない。
+        # SameSite=None は Secure 属性が必須で、HTTP で公開するとブラウザが Cookie を保存しない
+        same-site: ${SESSION_COOKIE_SAME_SITE:lax}
+        # HTTPS でない環境では SESSION_COOKIE_SECURE=false を渡す。
+        # 既定は安全側（true）にしておき、明示的に緩めたときだけ HTTP で動くようにする
+        secure: ${SESSION_COOKIE_SECURE:true}
 
 # 画面（Vercel / Vite）から Cookie 付きで呼べるようにする（docs/04_api-design.md 2.4）
 app:

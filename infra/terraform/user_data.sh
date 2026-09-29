@@ -45,11 +45,21 @@ mkdir -p /opt/taskboard
 # 環境変数ファイル。compose.yaml から読まれる。
 # 600 にして、root 以外からは読めないようにする
 cat > /opt/taskboard/.env <<ENVFILE
+# 接続先の部品。psql で直接つなぐときにも使うため個別に持っておく
 DB_HOST=${db_host}
 DB_PORT=${db_port}
 DB_NAME=${db_name}
-DB_USER=${db_user}
+
+# ここから下はアプリ（application.yml）がそのまま読む名前に合わせている
+DB_URL=jdbc:postgresql://${db_host}:${db_port}/${db_name}
+DB_USERNAME=${db_user}
 DB_PASSWORD=${db_password}
+
+# HTTPS ではないため、Secure 属性を付けない。
+# 付けるとブラウザがセッション Cookie を保存せず、ログインが維持できない。
+# HTTPS にしたら true に戻すこと（docs/07_deployment.md 12.2）
+SESSION_COOKIE_SECURE=false
+
 ECR_IMAGE=${ecr_image}
 ENVFILE
 chmod 600 /opt/taskboard/.env
@@ -62,10 +72,13 @@ services:
     image: $${ECR_IMAGE}
     restart: always
     environment:
-      # 接続先は RDS のエンドポイント。値は .env から読まれる
-      SPRING_DATASOURCE_URL: jdbc:postgresql://$${DB_HOST}:$${DB_PORT}/$${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: $${DB_USER}
-      SPRING_DATASOURCE_PASSWORD: $${DB_PASSWORD}
+      # 接続先は RDS のエンドポイント。値は .env から読まれる。
+      # 変数名は application.yml が読むものに合わせてある
+      DB_URL: $${DB_URL}
+      DB_USERNAME: $${DB_USERNAME}
+      DB_PASSWORD: $${DB_PASSWORD}
+      # HTTP で公開するため、セッション Cookie の Secure 属性を外す
+      SESSION_COOKIE_SECURE: $${SESSION_COOKIE_SECURE}
       PORT: 8080
       TZ: Asia/Tokyo
       # メモリ 1GB に収めるための JVM 設定。

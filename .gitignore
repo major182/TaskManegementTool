@@ -27,3 +27,6 @@ override.tf.json
 
 # terraform plan の保存ファイル（秘密の値を含むため Git に入れない）
 *.bin
+
+# Spring Boot に同梱する画面のビルド成果物（Dockerfile が入れるため Git には持たない）
+backend/src/main/resources/static/

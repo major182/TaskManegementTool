@@ -72,6 +72,22 @@ public class SecurityConfig {
                                 PathPatternRequestMatcher.withDefaults().matcher("/swagger-ui/**"),
                                 PathPatternRequestMatcher.withDefaults().matcher("/swagger-ui.html"))
                         .permitAll()
+                        // 画面（React のビルド成果物）は jar に同梱し、同じサーバーから配る
+                        // （docs/07_deployment.md 12章）。ログインする前に読み込まれるため、
+                        // 静的ファイルだけは認証なしで通す必要がある。
+                        // 許可しすぎないよう、実際にビルドで出力されるものだけを列挙する。
+                        //
+                        // 画面遷移は URL を変えない方式（History API の pushState を URL 引数なしで呼ぶ）
+                        // のため、アドレスは常に "/" のまま。したがって
+                        // 「どのパスでも index.html を返す」というフォールバックは不要。
+                        // 将来 react-router を入れて URL が変わるようになったら、そのとき追加する
+                        .requestMatchers(
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/"),
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/index.html"),
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/assets/**"),
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/favicon.svg"),
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/icons.svg"))
+                        .permitAll()
                         .anyRequest().authenticated())
                 // 未ログインのときはログイン画面へリダイレクトせず、401 と JSON を返す
                 .exceptionHandling(handling -> handling.authenticationEntryPoint(unauthorizedEntryPoint()))
