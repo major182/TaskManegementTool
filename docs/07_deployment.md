@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 1.3（ドラフト） |
+| ドキュメント版数 | 1.4（ドラフト） |
 | 作成日 | 2026-09-27 |
 | 最終更新日 | 2026-09-29 |
 | 作成者 | （氏名） |
@@ -2751,6 +2751,54 @@ output "github_actions_role_arn" {
 terraform -chdir=infra/terraform output -raw github_actions_role_arn
 ```
 
+#### ⚠️ 信頼設定でつまずく箇所：識別子には数値 ID が入る
+
+**多くの解説記事のとおりに書くと、ここで必ず失敗します。**
+
+GitHub が AWS に見せる身分証（OIDC トークン）には、「どのリポジトリからの実行か」を表す
+識別子（`sub`）が入っています。これが**名前だけでなく数値 ID を含む形式**になっています。
+
+```
+記事によくある形: repo:major182/TaskManegementTool:ref:refs/heads/main
+実際に届く形:     repo:major182@329081291/TaskManegementTool@1371042617:ref:refs/heads/main
+                             ^^^^^^^^^^                    ^^^^^^^^^^^
+                             アカウントID                   リポジトリID
+```
+
+名前だけで条件を書くと一致せず、次のエラーで止まります。
+
+```
+Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity
+```
+
+**ID は次のコマンドで調べられます。**
+
+```powershell
+gh api repos/＜オーナー名＞/＜リポジトリ名＞ --jq '"オーナーID: (.owner.id)  リポジトリID: (.id)"'
+```
+
+> **ID で照合するほうが安全でもあります。**
+> 名前は変更できるため、名前だけで許可していると、
+> **名前を変えたあとに同じ名前を第三者が取得して、あなたの AWS に対して認証できてしまいます。**
+> ID は変わらないので、その心配がありません。
+
+#### 原因が分からないときは CloudTrail を見る
+
+「認証が拒否された」というエラーだけでは、**条件のどこが合わなかったのかが分かりません。**
+AWS 側に届いた実際のリクエストを見れば一発で分かります。
+
+```powershell
+aws cloudtrail lookup-events `
+  --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRoleWithWebIdentity `
+  --max-results 3 --region ap-northeast-1 `
+  --query "Events[].CloudTrailEvent" --output text
+```
+
+返ってくる JSON の `userIdentity.principalId` に、**GitHub が実際に送ってきた識別子**が入っています。
+それを信頼ポリシーの条件と見比べれば、どこが違うか分かります。
+
+**推測で条件を書き換えて試すより、実際に届いた値を見るほうが早い**です。
+
 #### デプロイ先の指定：ID を固定しない
 
 インスタンス ID を GitHub Secret に入れておく方法もありますが、**採用していません。**
@@ -3409,6 +3457,7 @@ window.history.pushState(BOARD_HISTORY_STATE, '')
 
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 1.4 | 2026-09-29 | 自動デプロイの初回実行が AWS の認証で失敗したため、原因と対処を 9.6 に追記。GitHub が送る OIDC の識別子は名前ではなく数値 ID を含む形式であり、記事によくある `repo:owner/repo:*` では一致しない。原因の調べ方として CloudTrail の見方も記載 | |
 | 1.3 | 2026-09-29 | 自動デプロイ（CD）を導入し、9.6 を実際のワークフローの内容に書き換え。main へのマージで、ビルド → ECR への push → EC2 への反映 → 死活確認までを自動化した。デプロイ先はインスタンス ID を固定せずタグから探す（EC2 が作り直されても追従するため）。入れ替えの手順は EC2 上の `/opt/taskboard/deploy.sh` に置き、ワークフローからは呼ぶだけにした。公開リポジトリで発火条件を `pull_request` にしてはいけない理由も明記 | |
 | 1.2 | 2026-09-29 | 品質チェックの記録を13章として新設。公開リポジトリに実際の IP アドレスを書かない方針に変更し、8.6 の記録から実値を伏せた | |
 | 1.1 | 2026-09-29 | デプロイ後の品質チェックの結果を反映。7.5・7.6・7.10・7.11・7.12 のコード掲載を実ファイルの内容に差し替え（プライベートサブネット・RDS 関連の変数・DB 接続の引数などが抜けており、そのままコピーすると動かない状態だった）。9章のゴールと 9.1 の記述を実装に合わせ、9.6 の `deploy.yml` のビルド範囲を `./backend` から直下に修正。節番号の参照ずれ（8.6→8.8、9.5→9.6）を訂正。DB のパスワードをパラメータストアに移し、Docker のログ上限とヘルスチェックを追加。13章に3件の症状を追加 | |

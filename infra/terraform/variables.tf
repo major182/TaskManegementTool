@@ -176,7 +176,37 @@ variable "allowed_ssh_cidr" {
 }
 
 variable "github_repository" {
-  description = "GitHub Actions から ECR へ push させるリポジトリ（オーナー名/リポジトリ名）"
+  description = "GitHub Actions から AWS を操作させるリポジトリ（オーナー名/リポジトリ名）。表示用"
   type        = string
   default     = "major182/TaskManegementTool"
+}
+
+variable "github_owner_id" {
+  description = <<-EOT
+    GitHub アカウントの数値 ID。
+
+    GitHub は OIDC の識別子に、名前ではなく数値 ID を含めて送ってくる。
+      repo:<オーナー名>@<オーナーID>/<リポジトリ名>@<リポジトリID>:ref:refs/heads/main
+
+    名前で照合すると一致せず、認証が拒否される（#69）。
+    また ID で照合するほうが安全でもある。名前は変更できるため、
+    名前だけで許可していると、変更後に同じ名前を第三者が取得して
+    なりすませる余地が残る。ID は変わらないのでその心配がない。
+
+    確認方法：
+      gh api repos/<オーナー名>/<リポジトリ名> --jq '.owner.id'
+  EOT
+  type        = string
+  default     = "329081291"
+}
+
+variable "github_repository_id" {
+  description = <<-EOT
+    GitHub リポジトリの数値 ID。理由は github_owner_id を参照。
+
+    確認方法：
+      gh api repos/<オーナー名>/<リポジトリ名> --jq '.id'
+  EOT
+  type        = string
+  default     = "1371042617"
 }
