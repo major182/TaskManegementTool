@@ -2,9 +2,9 @@
 
 | 項目 | 内容 |
 |---|---|
-| ドキュメント版数 | 0.6（ドラフト） |
+| ドキュメント版数 | 0.7（ドラフト） |
 | 作成日 | 2026-09-20 |
-| 最終更新日 | 2026-09-23 |
+| 最終更新日 | 2026-09-30 |
 | 作成者 | （氏名） |
 | ステータス | レビュー待ち |
 
@@ -63,6 +63,8 @@ erDiagram
     users ||--o{ boards : "1人が0個以上持つ"
     boards ||--o{ lists : "1つに0個以上入る"
     lists ||--o{ cards : "1つに0枚以上入る"
+    users ||--o| user_themes : "1人が0〜1件持つ"
+    users ||--o| user_background_images : "1人が0〜1枚持つ"
 
     users {
         BIGINT id PK
@@ -99,6 +101,21 @@ erDiagram
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
         TIMESTAMPTZ deleted_at "NULL=通常表示"
+    }
+    user_themes {
+        BIGINT user_id PK "FK"
+        VARCHAR theme_type "DEFAULT/PRESET/CUSTOM/IMAGE"
+        VARCHAR preset_key "NULL可"
+        CHAR custom_sidebar_color "#RRGGBB NULL可"
+        CHAR custom_board_color "#RRGGBB NULL可"
+        TIMESTAMPTZ updated_at
+    }
+    user_background_images {
+        BIGINT user_id PK "FK"
+        BYTEA content "画像データ"
+        VARCHAR content_type "image/jpeg など"
+        INTEGER size_bytes "5MB以下"
+        TIMESTAMPTZ updated_at
     }
 ```
 
@@ -170,6 +187,40 @@ erDiagram
 
 > 完了したカードは並べ替えずその場に表示する（要件 5.2）ため、`is_done` は並び順に影響しません。
 
+### 3.5 user_themes（テーマ）
+
+v0.7 で追加（F-61〜66）。利用者1人につき最大1行です。**行が無い利用者は「既定」として扱います**（新規登録のたびに行を作らずに済むため）。
+
+| カラム名 | 型 | NULL | 既定値 | 説明 |
+|---|---|---|---|---|
+| user_id | BIGINT | ✕ | ― | 主キー兼 `users.id` への外部キー（1人1行を主キーで保証する） |
+| theme_type | VARCHAR(10) | ✕ | ― | `DEFAULT`（既定）／`PRESET`（テンプレート）／`CUSTOM`（カスタムカラー）／`IMAGE`（背景画像） |
+| preset_key | VARCHAR(20) | ◯ | NULL | テンプレートの名前。`sky`（空）／`sunset`（夕焼け）／`forest`（森）／`night`（夜）／`stone`（石）。`PRESET` のときは必須 |
+| custom_sidebar_color | CHAR(7) | ◯ | NULL | カスタムカラーのサイドバーの色。`#RRGGBB`（大文字）。`CUSTOM` のときは必須 |
+| custom_board_color | CHAR(7) | ◯ | NULL | カスタムカラーのボード表示エリアの色。形式は同上 |
+| updated_at | TIMESTAMPTZ | ✕ | `now()` | 更新日時 |
+
+- **カスタムカラーの2色は、他の種類に切り替えても消さずに残します。** 次にカスタムカラーを開いたときの初期値にするためです（要件 8.1）。そのため「`CUSTOM` 以外なら NULL」という制約は付けません
+- テンプレートの**実際の色はデータベースに持ちません。** 名前だけを保存し、色は画面側の定数（[01-3 業務ルール 5.7](01-3_business-rules.md#57-背景テーマのルール) の表）で決めます。色を調整しても保存済みのデータを直さずに済むためです
+- 色は RGB の数値3つではなく `#RRGGBB` の文字列1つで持ちます。画面の CSS でそのまま使え、検証も正規表現1つで済むためです。R・G・B の数値入力は画面側で変換します
+- `IMAGE` のときに画像が本当にあるかは、テーブルをまたぐため CHECK 制約では確かめられません。アプリ側（Service）で確認し、画像を削除したときは同じトランザクションで `DEFAULT` に戻します
+
+### 3.6 user_background_images（背景画像）
+
+v0.7 で追加（F-64）。利用者1人につき最大1行です。
+
+| カラム名 | 型 | NULL | 既定値 | 説明 |
+|---|---|---|---|---|
+| user_id | BIGINT | ✕ | ― | 主キー兼 `users.id` への外部キー |
+| content | BYTEA | ✕ | ― | 画像ファイルの中身（バイナリ） |
+| content_type | VARCHAR(20) | ✕ | ― | `image/jpeg`／`image/png`／`image/webp`。**送られてきた申告ではなく、中身から判定した値**を入れる |
+| size_bytes | INTEGER | ✕ | ― | 大きさ（バイト）。1〜5,242,880（5MB） |
+| updated_at | TIMESTAMPTZ | ✕ | `now()` | アップロードした日時。画像の URL に版番号として付け、置き換えたときにブラウザの古いキャッシュが使われないようにする |
+
+- **画像を `user_themes` と別のテーブルにした理由**：テーマを読むたびに最大 5MB の画像まで読み込まないようにするためです。画像の中身は、画像を取得する API（[04 API設計書 4.20](04_api-design.md)）のときだけ読みます
+- テーマを取得するときに画像の有無・版番号だけ知りたい場合も、`content` を含めずに `content_type`・`size_bytes`・`updated_at` だけを取得します
+- 画像をデータベースに置く判断は、インフラを増やさず開発環境でもそのまま動くこと、RDS の自動バックアップに含まれることを優先したものです（利用者と合意済み）。実務では S3 などのファイル置き場に置き、データベースには場所だけを持つのが一般的です
+
 ---
 
 ## 4. 制約・インデックス
@@ -182,6 +233,8 @@ erDiagram
 | lists.board_id | boards.id | `ON DELETE CASCADE` | ボードを**完全に削除**したとき、中のリストも自動で消える（要件 5.3） |
 | cards.list_id | lists.id | `ON DELETE CASCADE` | リストを**完全に削除**したとき、中のカードも自動で消える |
 | users.last_opened_board_id | boards.id | `ON DELETE SET NULL` | 最後に開いていたボードを完全削除したら、記録を空にする |
+| user_themes.user_id | users.id | `ON DELETE CASCADE` | 退会機能は作らないが、整合性のために設定 |
+| user_background_images.user_id | users.id | `ON DELETE CASCADE` | 同上 |
 
 ### 4.2 一意制約
 
@@ -200,6 +253,12 @@ erDiagram
 | users.username | `~ '^[A-Za-z0-9_]{4,20}$'`（形式と文字数） |
 | boards.name / lists.name / cards.title | `btrim(...) <> ''`（空白だけの入力を禁止） |
 | lists.position / cards.position | `>= 0` |
+| user_themes.theme_type | `IN ('DEFAULT', 'PRESET', 'CUSTOM', 'IMAGE')` |
+| user_themes.preset_key | NULL または `IN ('sky', 'sunset', 'forest', 'night', 'stone')` |
+| user_themes | `theme_type <> 'PRESET' OR preset_key IS NOT NULL`／`theme_type <> 'CUSTOM' OR（2色とも NOT NULL）` |
+| user_themes.custom_*_color | NULL または `~ '^#[0-9A-F]{6}$'` |
+| user_background_images.content_type | `IN ('image/jpeg', 'image/png', 'image/webp')` |
+| user_background_images.size_bytes | `BETWEEN 1 AND 5242880` |
 
 ### 4.4 インデックス
 
@@ -268,7 +327,9 @@ erDiagram
 
 ## 6. DDL（Flyway 用）
 
-`backend/src/main/resources/db/migration/V1__create_tables.sql` として配置します。
+### 6.1 基本の4テーブル（V1・V2）
+
+`backend/src/main/resources/db/migration/V1__create_tables.sql` として配置します（boards の `position` は V2 で追加）。
 
 ```sql
 -- V1__create_tables.sql
@@ -342,6 +403,48 @@ CREATE INDEX idx_lists_deleted  ON lists (board_id, deleted_at) WHERE deleted_at
 CREATE INDEX idx_cards_deleted  ON cards (list_id, deleted_at)  WHERE deleted_at IS NOT NULL;
 ```
 
+### 6.2 背景テーマ（V3）
+
+`backend/src/main/resources/db/migration/V3__create_theme_tables.sql` として配置します（v0.7）。
+
+```sql
+-- V3__create_theme_tables.sql
+
+CREATE TABLE user_themes (
+    user_id              BIGINT      PRIMARY KEY,
+    theme_type           VARCHAR(10) NOT NULL,
+    preset_key           VARCHAR(20),
+    custom_sidebar_color CHAR(7),
+    custom_board_color   CHAR(7),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_user_themes_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT ck_user_themes_type CHECK (theme_type IN ('DEFAULT', 'PRESET', 'CUSTOM', 'IMAGE')),
+    CONSTRAINT ck_user_themes_preset_key
+        CHECK (preset_key IS NULL OR preset_key IN ('sky', 'sunset', 'forest', 'night', 'stone')),
+    CONSTRAINT ck_user_themes_preset_required CHECK (theme_type <> 'PRESET' OR preset_key IS NOT NULL),
+    CONSTRAINT ck_user_themes_custom_required
+        CHECK (theme_type <> 'CUSTOM' OR (custom_sidebar_color IS NOT NULL AND custom_board_color IS NOT NULL)),
+    CONSTRAINT ck_user_themes_sidebar_color
+        CHECK (custom_sidebar_color IS NULL OR custom_sidebar_color ~ '^#[0-9A-F]{6}$'),
+    CONSTRAINT ck_user_themes_board_color
+        CHECK (custom_board_color IS NULL OR custom_board_color ~ '^#[0-9A-F]{6}$')
+);
+
+CREATE TABLE user_background_images (
+    user_id      BIGINT      PRIMARY KEY,
+    content      BYTEA       NOT NULL,
+    content_type VARCHAR(20) NOT NULL,
+    size_bytes   INTEGER     NOT NULL,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_user_background_images_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT ck_user_background_images_type
+        CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp')),
+    CONSTRAINT ck_user_background_images_size CHECK (size_bytes BETWEEN 1 AND 5242880)
+);
+```
+
+> どちらも主キーで引くだけなので、追加のインデックスは要りません。
+
 > `position` は PostgreSQL の**予約語ではありませんが**、SQL 標準では予約語に含まれます。上記のように単純な `SELECT`／`UPDATE` では問題なく使えますが、気になる場合は `sort_order` への改名を検討します（下記 7 章の No.3）。
 
 ---
@@ -360,6 +463,7 @@ CREATE INDEX idx_cards_deleted  ON cards (list_id, deleted_at)  WHERE deleted_at
 ## 改訂履歴
 | 版数 | 日付 | 内容 | 作成者 |
 |---|---|---|---|
+| 0.7 | 2026-09-30 | 背景テーマ（F-61〜66）に対応。user_themes（3.5）と user_background_images（3.6）を追加し、外部キー・CHECK 制約・DDL（6.2、Flyway V3）を追記。行が無い利用者を既定として扱う、カスタムカラーは切り替えても残す、テンプレートの色は画面側で持つ、と決めた | |
 | 0.6 | 2026-09-23 | ボードの並び替え（F-16）に対応。boards に position を追加し、一意制約・索引・新規作成時の位置・元に戻す位置を更新 | |
 | 0.5 | 2026-09-22 | 実装に合わせて修正。ゴミ箱の一覧は親の状態を問わず表示すること（1.1）、新しく作るときの position の決め方（5.2）を実際の処理に合わせた | |
 | 0.4 | 2026-09-21 | リストAPI の実装で判明した、ゴミ箱に入った行の position の扱い（表示する行を前、ゴミ箱の行を後ろに置く通し番号）を 5.3 に追記 | |
