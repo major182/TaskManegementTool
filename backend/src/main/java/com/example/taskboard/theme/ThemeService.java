@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.example.taskboard.common.BadRequestException;
 import com.example.taskboard.common.ConflictException;
+import com.example.taskboard.common.NotFoundException;
+import com.example.taskboard.common.PayloadTooLargeException;
 import com.example.taskboard.theme.ThemeDtos.CustomColors;
 import com.example.taskboard.theme.ThemeDtos.ImageInfo;
 import com.example.taskboard.theme.ThemeDtos.ThemeResponse;
@@ -24,7 +26,11 @@ public class ThemeService {
     /** テンプレートの名前。実際の色は画面側の定数で持つ（docs/03_db-design.md 3.5）。 */
     static final Set<String> PRESET_KEYS = Set.of("sky", "sunset", "forest", "night", "stone");
 
+    /** 背景画像の上限（5MB。docs/01-3_business-rules.md 5.7）。DB の ck_user_background_images_size と同じ値。 */
+    static final int MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
     private static final String INVALID_THEME = "テーマの指定が正しくありません";
+    private static final String IMAGE_NOT_FOUND = "背景画像が見つかりません";
 
     private final UserThemeRepository themeRepository;
     private final BackgroundImageRepository imageRepository;
@@ -74,6 +80,57 @@ public class ThemeService {
         }
 
         return toResponse(userId, themeRepository.save(theme));
+    }
+
+    /**
+     * 背景画像のアップロード（F-64）。すでにあれば置き換える。
+     * テーマは切り替えない。背景にするかどうかはパネルの「適用」で決まる（docs/04_api-design.md 4.19）。
+     */
+    @Transactional
+    public ImageInfo uploadImage(Long userId, byte[] content) {
+        if (content == null || content.length == 0) {
+            throw new BadRequestException("画像ファイルを選んでください");
+        }
+        // 上限は Spring の設定（application.yml）でも止めるが、ここでも確かめる。
+        // 設定を変えたり、別の経路から呼ばれたりしても、業務ルールが守られるようにするため
+        if (content.length > MAX_IMAGE_BYTES) {
+            throw new PayloadTooLargeException("5MB 以下の画像を選んでください");
+        }
+        String contentType = ImageFormat.detect(content)
+                .orElseThrow(() -> new BadRequestException("JPEG・PNG・WebP の画像を選んでください"));
+
+        BackgroundImage image = imageRepository.findById(userId)
+                .map(existing -> {
+                    existing.replace(content, contentType);
+                    return existing;
+                })
+                .orElseGet(() -> new BackgroundImage(userId, content, contentType));
+
+        // すぐ書き込んで更新日時（版番号）を確定させ、応答に載せる
+        BackgroundImage saved = imageRepository.saveAndFlush(image);
+        return new ImageInfo(saved.getUpdatedAt().toEpochMilli(), saved.getContentType(), saved.getSizeBytes());
+    }
+
+    /** 背景画像の中身（F-64）。画面が背景として読み込む（docs/04_api-design.md 4.20）。 */
+    @Transactional(readOnly = true)
+    public BackgroundImage findImage(Long userId) {
+        return imageRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException(IMAGE_NOT_FOUND));
+    }
+
+    /**
+     * 背景画像の削除（F-64）。
+     * 画像をテーマに使っていた場合は、表示できない背景を指したままにならないよう、
+     * 同じトランザクションで既定に戻す（docs/01-3_business-rules.md 5.7）。
+     */
+    @Transactional
+    public void deleteImage(Long userId) {
+        BackgroundImage image = findImage(userId);
+        imageRepository.delete(image);
+
+        themeRepository.findById(userId)
+                .filter(theme -> theme.getThemeType() == ThemeType.IMAGE)
+                .ifPresent(UserTheme::useDefault);
     }
 
     private static ThemeType parseType(String type) {
