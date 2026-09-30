@@ -5,5 +5,14 @@
    * 表示エリアの背景。テーマの色（--board-bg）はこの要素に渡すため、ここで塗る。
    * body の背景は変えないので、ログイン画面は既定の見た目のまま（業務ルール 5.7）
    */
-  background: var(--board-bg);
+  background-color: var(--board-bg);
+  /*
+   * 背景画像（F-64）。縦横比を保って全面に表示し、はみ出た部分は切り取る。
+   * スクロールしても動かさない（業務ルール 5.7）。画像が無いときは none で色だけになる
+   */
+  background-image: var(--board-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }

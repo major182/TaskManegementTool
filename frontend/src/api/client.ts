@@ -73,7 +73,10 @@ async function toApiError(response: Response): Promise<ApiError> {
 export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {}
 
-  if (body !== undefined) {
+  // ファイルを送るとき（FormData）は Content-Type を付けない。
+  // ブラウザが区切りの文字列（boundary）入りの multipart/form-data を自分で付けるため
+  const isForm = body instanceof FormData
+  if (body !== undefined && !isForm) {
     headers['Content-Type'] = 'application/json'
   }
   if (method !== 'GET') {
@@ -91,7 +94,7 @@ export async function request<T>(method: Method, path: string, body?: unknown): 
       headers,
       // 04 2.2：Cookie でセッションを持つため必須
       credentials: 'include',
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     })
   } catch (cause) {
     throw new NetworkError(cause)

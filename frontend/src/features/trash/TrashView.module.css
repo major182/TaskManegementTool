@@ -10,7 +10,7 @@
   align-items: center;
   gap: 16px;
   padding: 12px 20px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--board-header-bg);
 }
 
 .title {

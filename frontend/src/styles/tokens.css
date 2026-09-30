@@ -26,6 +26,8 @@
   --board-text: #fff;
   --board-overlay: rgba(255, 255, 255, 0.2);
   --board-overlay-hover: rgba(255, 255, 255, 0.3);
+  /* ボード名・ゴミ箱の見出しの帯。背景画像のときは濃くして、画像の柄に関係なく読めるようにする */
+  --board-header-bg: rgba(0, 0, 0, 0.15);
 
   /* 寸法 */
   --sidebar-width: 240px;

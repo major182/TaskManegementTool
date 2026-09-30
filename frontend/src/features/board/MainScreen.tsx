@@ -12,7 +12,7 @@ import { Sidebar } from './Sidebar.tsx'
 import { TrashView } from '../trash/TrashView.tsx'
 import { ThemePanel, THEME_TOGGLE_ATTRIBUTE } from '../theme/ThemePanel.tsx'
 import { themeStyle, toSelection, type ThemeSelection } from '../theme/themeColors.ts'
-import { useTheme, useUpdateTheme } from '../theme/useTheme.ts'
+import { useDeleteImage, useTheme, useUpdateTheme, useUploadImage } from '../theme/useTheme.ts'
 import styles from './MainScreen.module.css'
 import {
   useBoardDetail,
@@ -54,6 +54,8 @@ export function MainScreen({ user }: { user: UserResponse }) {
   // 取得に失敗した・まだ届いていないときは既定のテーマで表示する（05 画面設計書 4.7）
   const themeQuery = useTheme()
   const updateTheme = useUpdateTheme()
+  const uploadImage = useUploadImage()
+  const deleteImage = useDeleteImage()
   const [isThemeOpen, setIsThemeOpen] = useState(false)
   /** パネルで選んでいる途中のテーマ。保存するまでは画面にだけ反映する */
   const [previewTheme, setPreviewTheme] = useState<ThemeSelection | null>(null)
@@ -129,7 +131,10 @@ export function MainScreen({ user }: { user: UserResponse }) {
   }
 
   return (
-    <div className={styles.screen} style={themeStyle(displayedTheme)}>
+    <div
+      className={styles.screen}
+      style={themeStyle(displayedTheme, themeQuery.data?.image?.version ?? null)}
+    >
       <Sidebar
         boards={boards}
         activeBoardId={activeBoardId}
@@ -149,6 +154,9 @@ export function MainScreen({ user }: { user: UserResponse }) {
         <ThemePanel
           initial={savedTheme}
           savedCustomColors={themeQuery.data?.customColors ?? null}
+          image={themeQuery.data?.image ?? null}
+          onUploadImage={(file) => uploadImage.mutateAsync(file)}
+          onDeleteImage={() => deleteImage.mutateAsync()}
           onPreview={setPreviewTheme}
           onApply={handleApplyTheme}
           onCancel={closeThemePanel}
