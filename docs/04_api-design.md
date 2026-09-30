@@ -62,7 +62,7 @@ Spring Security の既定では、ログイン情報（セッション）はサ�
 | 項目 | 内容 |
 |---|---|
 | 方式 | セッション方式。ログイン成功時にサーバーが `JSESSIONID` Cookie を返す |
-| Cookie の属性 | `HttpOnly` は常に付ける。`SameSite` は **`Lax`**、`Secure` は環境変数 `SESSION_COOKIE_SECURE` で切り替える（既定 `true`）。**画面を jar に同梱して同じオリジンから配る方式に変えた**ため、`SameSite=None`（別ドメイン向け）は不要になった（v0.9、[07 デプロイ手順書 12.2](07_deployment.md)）。HTTP で公開している現在の構成では `SESSION_COOKIE_SECURE=false` を渡す。`Secure` を付けると HTTPS 以外ではブラウザが Cookie を保存せず、ログインが維持できない |
+| Cookie の属性 | `HttpOnly` は常に付ける。`SameSite` は **`Lax`**、`Secure` は環境変数 `SESSION_COOKIE_SECURE` で切り替える（既定 `true`）。**画面を jar に同梱して同じオリジンから配る方式に変えた**ため、`SameSite=None`（別ドメイン向け）は不要になった（v0.9、[07 デプロイ手順書 1.4](07_deployment.md)）。HTTP で公開している現在の構成では `SESSION_COOKIE_SECURE=false` を渡す。`Secure` を付けると HTTPS 以外ではブラウザが Cookie を保存せず、ログインが維持できない |
 | フロント側の送信 | `fetch` に **`credentials: 'include'`** を必ず付ける（付けないと Cookie が送られず、常に 401 になる） |
 | 未ログイン時 | `/api/auth/signup` と `/api/auth/login` 以外はすべて **401** を返す（`/api/auth/me`・`/api/auth/logout` も 401。7章と同じ）。画面はログイン画面（S-02）へ遷移する |
 | 他人のデータ | 存在は知らせず **404** を返す（要件 6.1）。「ログイン中の利用者のデータか」を各処理で必ず確認する |

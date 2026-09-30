@@ -103,17 +103,17 @@ TaskManegementTool/
 |---|---|---|
 | エディタ | IntelliJ IDEA Community Edition（Java）／VS Code（React） | Java は IntelliJ の補完・デバッグが強い。VS Code 1本にまとめる場合は Extension Pack for Java を入れる |
 | ソース管理 | Git / GitHub | 現場では必ず使う |
-| CI / CD | GitHub Actions | push のたびにビルドとテストを自動で動かせる。GitHub と同じ場所で完結する。設定は `.github/workflows/ci.yml`（v0.8 で作成）。PR ごとにフロントエンドの `npm run check`・`npm run build` と、バックエンドの `./gradlew check` を実行する。**`main` へのマージ時は `deploy.yml` が自動で本番に反映する**（ビルド → ECR への push → EC2 での入れ替え → 死活確認）。AWS への認証は OIDC で、アクセスキーを GitHub に置かない（v0.15、[07 デプロイ手順書 9.6](07_deployment.md)） |
+| CI / CD | GitHub Actions | push のたびにビルドとテストを自動で動かせる。GitHub と同じ場所で完結する。設定は `.github/workflows/ci.yml`（v0.8 で作成）。PR ごとにフロントエンドの `npm run check`・`npm run build` と、バックエンドの `./gradlew check` を実行する。**`main` へのマージ時は `deploy.yml` が自動で本番に反映する**（ビルド → ECR への push → EC2 での入れ替え → 死活確認）。AWS への認証は OIDC で、アクセスキーを GitHub に置かない（v0.15、[07 デプロイ手順書 4.1](07_deployment.md)） |
 | 公開先 | **AWS**（東京リージョン） | 課題の指定により AWS を使う。手順とサービスの選定理由は [07 デプロイ手順書](07_deployment.md)（v0.10 で確定。v0.9 で Vercel / Render / Neon から変更） |
 | ┗ インフラの構築方法 | **Terraform（IaC）＋ AWS CLI** | 課題の指定。構成をコードで管理することで、再現・レビュー・一括削除ができる。コードは `infra/terraform/` |
-| ┗ API（Spring Boot） | **EC2（t3.micro）上の Docker** | コンテナで動かす前提で**リポジトリ直下の `Dockerfile`** を用意（画面とサーバーの両方をビルドするため、`backend/` の中には置けない）。待ち受けポートは環境変数 `PORT` で受け取る。App Runner・ECS (Fargate) ＋ ALB は月 $25 前後かかるため、付与クレジットの範囲に収まる EC2（月 $10 前後）を選んだ。**t2.micro は新方式の無料プランの対象外**で作成できない（[07 デプロイ手順書 1.3](07_deployment.md)） |
+| ┗ API（Spring Boot） | **EC2（t3.micro）上の Docker** | コンテナで動かす前提で**リポジトリ直下の `Dockerfile`** を用意（画面とサーバーの両方をビルドするため、`backend/` の中には置けない）。待ち受けポートは環境変数 `PORT` で受け取る。App Runner・ECS (Fargate) ＋ ALB は月 $25 前後かかるため、付与クレジットの範囲に収まる EC2（月 $10 前後）を選んだ。**t2.micro は新方式の無料プランの対象外**で作成できない（[07 デプロイ手順書 2.1](07_deployment.md)） |
 | ┗ データベース | **RDS for PostgreSQL（db.t4g.micro、単一 AZ）** | 月 $21 ほど（インスタンス $18.25 ＋ gp3 20GB $2.76、2026-09 時点の東京リージョン）かかるが、**自動バックアップが取れ、EC2 を作り直してもデータが残る**。EC2 に同居させる案は追加費用 $0 だが、EC2 を消すとデータも消えるため採用しなかった（[07 デプロイ手順書 1.3](07_deployment.md)） |
 | ┗ DB の置き場所 | **プライベートサブネット（2 AZ）** | インターネットから直接たどり着けない場所に置く。RDS は単一 AZ 構成でも 2つの AZ にまたがるサブネットグループを要求するため、サブネットは2つ作る |
 | ┗ コンテナイメージの置き場 | **Amazon ECR（プライベート）** | t3.micro（メモリ 1GB）では Gradle のビルドが失敗するため、GitHub Actions でビルドして ECR に置き、EC2 は取得するだけにする |
-| ┗ 公開範囲 | **作業する PC の IP からのみ許可**（インターネットには公開しない） | **課題の指示による。** 公開範囲を狭めれば、アプリ側に不備があっても外から到達されない（多層防御）。設定は [07 デプロイ手順書 7.14](07_deployment.md) |
+| ┗ 公開範囲 | **作業する PC の IP からのみ許可**（インターネットには公開しない） | **課題の指示による。** 公開範囲を狭めれば、アプリ側に不備があっても外から到達されない（多層防御）。設定は [07 デプロイ手順書 5.2](07_deployment.md) |
 | ┗ EC2 への接続方法 | **SSM Session Manager** | SSH の鍵と 22番ポートが不要になり、鍵の管理と公開範囲の両方を減らせる |
 | ┗ CI から AWS への認証 | **GitHub OIDC**（アクセスキーを保存しない） | 永続的なアクセスキーを GitHub に預けずに済む。権限は ECR への push のみに絞る |
-| ┗ 画面（React） | **バックエンドに同梱**（`Dockerfile` の1段目でビルドし、`src/main/resources/static/` に入れて1コンテナで配信） | 画面と API が同じドメインになるため、**CORS の許可設定と CSRF トークンの手当てが不要**になり、5.1 が前提とする構成をそのまま満たす。まずシンプルな構成で動かすことを優先した。S3 ＋ CloudFront は見送り（[07 デプロイ手順書 12章](07_deployment.md)、#48 決着）。**HTTPS にできない点は、アクセス元を自分の IP に限定することで許容する** |
+| ┗ 画面（React） | **バックエンドに同梱**（`Dockerfile` の1段目でビルドし、`src/main/resources/static/` に入れて1コンテナで配信） | 画面と API が同じドメインになるため、**CORS の許可設定と CSRF トークンの手当てが不要**になり、5.1 が前提とする構成をそのまま満たす。まずシンプルな構成で動かすことを優先した。S3 ＋ CloudFront は見送り（[07 デプロイ手順書 1.4](07_deployment.md)、#48 決着）。**HTTPS にできない点は、アクセス元を自分の IP に限定することで許容する** |
 
 ### 3.5 実装時に確定したバージョン（2026-09-20）
 

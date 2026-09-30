@@ -9,7 +9,7 @@ Thumbs.db
 .env
 .env.local
 
-# Terraform（docs/07_deployment.md 7.3）
+# Terraform（docs/07_deployment.md 1.5）
 # .terraform/ … ダウンロードしたプラグイン。数百MBになり、terraform init で再取得できる
 # *.tfstate   … 何を作ったかの記録。DB パスワードが平文で入るため絶対にコミットしない
 # *.tfvars    … 設定値の実体。パスワードを書くため除外する（.example だけを共有する）

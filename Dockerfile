@@ -1,7 +1,7 @@
 # アプリ全体（React の画面 ＋ Spring Boot の API）を1つのコンテナにまとめる手順書。
 #
 # 画面は Spring Boot の jar に同梱し、同じサーバーの同じポートから配る
-# （docs/07_deployment.md 12章）。こうすると画面と API が「同じオリジン」になり、
+# （docs/07_deployment.md 1.4）。こうすると画面と API が「同じオリジン」になり、
 # CORS の許可設定も、CSRF トークンを画面側から読むための手当ても不要になる。
 #
 # 3段構えにしている理由：
@@ -16,7 +16,7 @@
 #   付けないと Docker が「署名情報付き」の形式で push し、
 #   ECR の脆弱性スキャンがイメージを読めずに結果が出ない。
 #   設定はあるのに検査されていない状態になるため、必ず付ける
-#   （docs/07_deployment.md 9.2）。
+#   （docs/07_deployment.md 4.1）。
 
 # --- 1段目：画面（React）をビルドする ---
 # Node の版数は CI（.github/workflows/ci.yml）と揃える

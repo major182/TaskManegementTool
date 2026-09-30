@@ -152,7 +152,7 @@ variable "allowed_app_cidr" {
 
     ★ 契約している回線のグローバル IP は、多くの場合ときどき変わる。
       つながらなくなったら、まず現在の IP を調べ直して terraform apply をやり直すこと
-      （調べ方は docs/07_deployment.md 7.14）。
+      （調べ方は docs/07_deployment.md 5.2）。
   EOT
   type        = list(string)
   default     = []
