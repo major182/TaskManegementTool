@@ -21,6 +21,13 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  # 背景画像のアップロード上限（docs/04_api-design.md 4.19）。既定は 1MB なので広げる。
+  # リクエスト全体はファイル以外の部分（区切りの文字列など）のぶん余裕を持たせる
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
 server:
   # 実行環境が待ち受けポートを環境変数 PORT で指定することが多いため、そこから受け取る
   port: ${PORT:8080}
@@ -28,6 +35,11 @@ server:
   # これが無いとアプリがリクエストを「HTTPS ではない」と判断し、
   # Secure 属性を付けた Cookie が意図どおりに扱われない
   forward-headers-strategy: framework
+  tomcat:
+    # Tomcat は既定で、2MB を超えるリクエストを読み切らずに接続を切ることがある。
+    # そうなると上限超過（413）の応答がブラウザに届かず、画面は通信エラーとしか分からない。
+    # 上限（6MB）より大きな値にして、読み切ってから 413 を返せるようにする
+    max-swallow-size: 10MB
   servlet:
     session:
       # 要件 F-08：ログイン状態は30日保持（docs/02_tech-stack.md 5.1）

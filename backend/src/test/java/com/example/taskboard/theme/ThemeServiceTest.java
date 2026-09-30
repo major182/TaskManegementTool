@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -15,9 +16,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import com.example.taskboard.common.BadRequestException;
 import com.example.taskboard.common.ConflictException;
+import com.example.taskboard.common.NotFoundException;
+import com.example.taskboard.common.PayloadTooLargeException;
+import com.example.taskboard.theme.ThemeDtos.ImageInfo;
 import com.example.taskboard.theme.ThemeDtos.CustomColors;
 import com.example.taskboard.theme.ThemeDtos.ThemeResponse;
 import com.example.taskboard.theme.ThemeDtos.ThemeUpdateRequest;
@@ -157,6 +162,105 @@ class ThemeServiceTest {
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("カスタムカラーの2色を指定してください");
         verify(themeRepository, never()).save(any());
+    }
+
+    @Test
+    void 画像をアップロードすると中身から判定した形式で保存しテーマは変えない() {
+        when(imageRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(imageRepository.saveAndFlush(any(BackgroundImage.class))).thenAnswer(i -> withUpdatedAt(i.getArgument(0)));
+
+        ImageInfo info = themeService.uploadImage(USER_ID, ImageFormatTest.PNG);
+
+        assertThat(info.contentType()).isEqualTo("image/png");
+        assertThat(info.sizeBytes()).isEqualTo(ImageFormatTest.PNG.length);
+        verify(themeRepository, never()).save(any());
+    }
+
+    @Test
+    void すでに画像があれば置き換える() {
+        BackgroundImage existing = new BackgroundImage(USER_ID, ImageFormatTest.PNG, "image/png");
+        when(imageRepository.findById(USER_ID)).thenReturn(Optional.of(existing));
+        when(imageRepository.saveAndFlush(any(BackgroundImage.class))).thenAnswer(i -> withUpdatedAt(i.getArgument(0)));
+
+        ImageInfo info = themeService.uploadImage(USER_ID, ImageFormatTest.JPEG);
+
+        assertThat(info.contentType()).isEqualTo("image/jpeg");
+        assertThat(existing.getContent()).isEqualTo(ImageFormatTest.JPEG);
+    }
+
+    @Test
+    void 画像でないファイルや空のファイルは400になる() {
+        assertThatThrownBy(() -> themeService.uploadImage(USER_ID, "GIF89a......".getBytes(StandardCharsets.UTF_8)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("JPEG・PNG・WebP の画像を選んでください");
+        assertThatThrownBy(() -> themeService.uploadImage(USER_ID, new byte[0]))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("画像ファイルを選んでください");
+        verify(imageRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void 上限を超える画像は413になり上限ちょうどは通る() {
+        byte[] tooLarge = new byte[ThemeService.MAX_IMAGE_BYTES + 1];
+        System.arraycopy(ImageFormatTest.PNG, 0, tooLarge, 0, ImageFormatTest.PNG.length);
+        assertThatThrownBy(() -> themeService.uploadImage(USER_ID, tooLarge))
+                .isInstanceOf(PayloadTooLargeException.class)
+                .hasMessage("5MB 以下の画像を選んでください");
+
+        byte[] justFits = new byte[ThemeService.MAX_IMAGE_BYTES];
+        System.arraycopy(ImageFormatTest.PNG, 0, justFits, 0, ImageFormatTest.PNG.length);
+        when(imageRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(imageRepository.saveAndFlush(any(BackgroundImage.class))).thenAnswer(i -> withUpdatedAt(i.getArgument(0)));
+        assertThat(themeService.uploadImage(USER_ID, justFits).sizeBytes()).isEqualTo(ThemeService.MAX_IMAGE_BYTES);
+    }
+
+    @Test
+    void 画像のテーマを使っているときに画像を消すと既定に戻る() {
+        UserTheme theme = new UserTheme(USER_ID);
+        theme.useImage();
+        when(imageRepository.findById(USER_ID))
+                .thenReturn(Optional.of(new BackgroundImage(USER_ID, ImageFormatTest.PNG, "image/png")));
+        when(themeRepository.findById(USER_ID)).thenReturn(Optional.of(theme));
+
+        themeService.deleteImage(USER_ID);
+
+        verify(imageRepository).delete(any(BackgroundImage.class));
+        assertThat(theme.getThemeType()).isEqualTo(ThemeType.DEFAULT);
+    }
+
+    @Test
+    void 画像以外のテーマなら画像を消してもテーマは変えない() {
+        UserTheme theme = new UserTheme(USER_ID);
+        theme.usePreset("sky");
+        when(imageRepository.findById(USER_ID))
+                .thenReturn(Optional.of(new BackgroundImage(USER_ID, ImageFormatTest.PNG, "image/png")));
+        when(themeRepository.findById(USER_ID)).thenReturn(Optional.of(theme));
+
+        themeService.deleteImage(USER_ID);
+
+        assertThat(theme.getThemeType()).isEqualTo(ThemeType.PRESET);
+        assertThat(theme.getPresetKey()).isEqualTo("sky");
+    }
+
+    @Test
+    void 画像が無ければ取得も削除も404になる() {
+        when(imageRepository.findById(USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> themeService.findImage(USER_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessage("背景画像が見つかりません");
+        assertThatThrownBy(() -> themeService.deleteImage(USER_ID))
+                .isInstanceOf(NotFoundException.class);
+        verify(imageRepository, never()).delete(any());
+    }
+
+    /**
+     * 保存時に DB が入れる更新日時を、代わりに入れる。
+     * 実際は @UpdateTimestamp が書き込み時に入れるが、単体テストでは DB を通らないため。
+     */
+    private static BackgroundImage withUpdatedAt(BackgroundImage image) {
+        ReflectionTestUtils.setField(image, "updatedAt", Instant.now());
+        return image;
     }
 
     private static BackgroundImageRepository.Info info(String contentType, int sizeBytes, Instant updatedAt) {
