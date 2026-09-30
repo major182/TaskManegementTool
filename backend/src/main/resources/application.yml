@@ -47,7 +47,7 @@ server:
 
 # 開発中に Vite の開発サーバー（http://localhost:5173）から呼べるようにするための設定。
 # 本番では画面を jar に同梱して同じサーバーから配るため、CORS の出番は無い
-# （課題としての単純さを優先し、設定自体は開発用に残している。docs/07_deployment.md 12.1）
+# （課題としての単純さを優先し、設定自体は開発用に残している。docs/07_deployment.md 1.4）
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

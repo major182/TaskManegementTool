@@ -80,7 +80,7 @@ public class SecurityConfig {
                                 PathPatternRequestMatcher.withDefaults().matcher("/swagger-ui.html"))
                         .permitAll()
                         // 画面（React のビルド成果物）は jar に同梱し、同じサーバーから配る
-                        // （docs/07_deployment.md 12章）。ログインする前に読み込まれるため、
+                        // （docs/07_deployment.md 1.4）。ログインする前に読み込まれるため、
                         // 静的ファイルだけは認証なしで通す必要がある。
                         // 許可しすぎないよう、実際にビルドで出力されるものだけを列挙する。
                         //

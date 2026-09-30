@@ -1,4 +1,4 @@
-# 改行コードの扱い（docs/07_deployment.md 7.3、CLAUDE.md 4章）
+# 改行コードの扱い（CLAUDE.md 4章）
 #
 # Windows の Git は既定（core.autocrlf=true）で、チェックアウト時に改行を CRLF に変換する。
 # しかしシェルスクリプトは Linux 上で実行されるため、CRLF のままだと

@@ -72,7 +72,7 @@ jobs:
           # --provenance=false / --sbom=false を付ける理由：
           #   付けないと「署名情報付き」の形式で push され、ECR の脆弱性スキャンが
           #   イメージを読めずに結果が出ない。設定はあるのに検査されない状態になる
-          #   （docs/07_deployment.md 13章）
+          #   （docs/07_deployment.md 4.1）
           docker build \
             --provenance=false --sbom=false \
             --platform linux/amd64 \

@@ -9,7 +9,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * 画面（React のビルド成果物）を配るときのキャッシュ設定
- * （docs/07_deployment.md 12.3）。
+ * （docs/07_deployment.md 1.4）。
  *
  * <p>Spring Security は既定で、すべての応答に「保存するな」というキャッシュ指示を付ける。
  * 認証が要る内容を端末に残さないための配慮で、API と index.html にはそのまま効かせたい。</p>
