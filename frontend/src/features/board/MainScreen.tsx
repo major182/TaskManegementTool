@@ -10,6 +10,9 @@ import { useLogout } from '../auth/useAuth.ts'
 import { BoardView, NoBoardView } from './BoardView.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { TrashView } from '../trash/TrashView.tsx'
+import { ThemePanel, THEME_TOGGLE_ATTRIBUTE } from '../theme/ThemePanel.tsx'
+import { themeStyle, toSelection, type ThemeSelection } from '../theme/themeColors.ts'
+import { useTheme, useUpdateTheme } from '../theme/useTheme.ts'
 import styles from './MainScreen.module.css'
 import {
   useBoardDetail,
@@ -47,6 +50,18 @@ export function MainScreen({ user }: { user: UserResponse }) {
   const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null)
   const [isTrashActive, setIsTrashActive] = useState(false)
 
+  // 背景テーマ（F-61〜66）。
+  // 取得に失敗した・まだ届いていないときは既定のテーマで表示する（05 画面設計書 4.7）
+  const themeQuery = useTheme()
+  const updateTheme = useUpdateTheme()
+  const [isThemeOpen, setIsThemeOpen] = useState(false)
+  /** パネルで選んでいる途中のテーマ。保存するまでは画面にだけ反映する */
+  const [previewTheme, setPreviewTheme] = useState<ThemeSelection | null>(null)
+  const savedTheme: ThemeSelection = themeQuery.data
+    ? toSelection(themeQuery.data)
+    : { type: 'DEFAULT' }
+  const displayedTheme = previewTheme ?? savedTheme
+
   const boards = boardListQuery.data ?? []
 
   // 表示するボードは描画のたびに決める（F-15）。
@@ -69,6 +84,19 @@ export function MainScreen({ user }: { user: UserResponse }) {
     if (!loadError) return
     notifyError(loadError, { operation: 'load' })
   }, [loadError, notifyError])
+
+  function closeThemePanel() {
+    setIsThemeOpen(false)
+    setPreviewTheme(null)
+    // 閉じたら「テーマを変更」ボタンにフォーカスを戻す（05 画面設計書 4.7）
+    document.querySelector<HTMLElement>(`[${THEME_TOGGLE_ATTRIBUTE}]`)?.focus()
+  }
+
+  function handleApplyTheme(selection: ThemeSelection) {
+    // 先に閉じて保存済みのテーマとして表示する。失敗したら useUpdateTheme が元に戻す
+    updateTheme.mutate(selection)
+    closeThemePanel()
+  }
 
   function selectBoard(boardId: number) {
     setIsTrashActive(false)
@@ -101,7 +129,7 @@ export function MainScreen({ user }: { user: UserResponse }) {
   }
 
   return (
-    <div className={styles.screen}>
+    <div className={styles.screen} style={themeStyle(displayedTheme)}>
       <Sidebar
         boards={boards}
         activeBoardId={activeBoardId}
@@ -111,9 +139,21 @@ export function MainScreen({ user }: { user: UserResponse }) {
         onSelectTrash={() => setIsTrashActive(true)}
         onCreateBoard={handleCreateBoard}
         onMoveBoard={(boardId, position) => moveBoard.mutate({ boardId, position })}
+        onToggleTheme={() => (isThemeOpen ? closeThemePanel() : setIsThemeOpen(true))}
+        isThemeOpen={isThemeOpen}
         onLogout={() => logout.mutate()}
         isLoggingOut={logout.isPending}
       />
+
+      {isThemeOpen && (
+        <ThemePanel
+          initial={savedTheme}
+          savedCustomColors={themeQuery.data?.customColors ?? null}
+          onPreview={setPreviewTheme}
+          onApply={handleApplyTheme}
+          onCancel={closeThemePanel}
+        />
+      )}
 
       {isTrashActive ? (
         <TrashView />

@@ -16,6 +16,17 @@
   --danger: #c9372c;
   --placeholder: rgba(9, 30, 66, 0.15);
 
+  /*
+   * テーマで差し替える色（05 画面設計書 4.7）。
+   * 既定の値は、これまで各 CSS に直書きしていた色そのまま。
+   * テーマを選ぶと features/theme/themeColors.ts の themeStyle() が上書きする
+   */
+  --sidebar-hover: rgba(255, 255, 255, 0.1);
+  --sidebar-divider: rgba(255, 255, 255, 0.15);
+  --board-text: #fff;
+  --board-overlay: rgba(255, 255, 255, 0.2);
+  --board-overlay-hover: rgba(255, 255, 255, 0.3);
+
   /* 寸法 */
   --sidebar-width: 240px;
   --list-width: 272px;

@@ -44,7 +44,7 @@
 }
 
 .navItem:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-hover);
 }
 
 .navItem.active {
@@ -71,7 +71,7 @@
 }
 
 .add:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-hover);
   opacity: 1;
 }
 
@@ -83,7 +83,7 @@
   margin-top: 16px;
   padding: 8px;
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: 1px solid var(--sidebar-divider);
   border-radius: 0;
   background: none;
   color: inherit;
@@ -91,7 +91,7 @@
 }
 
 .trash:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-hover);
 }
 
 .trash.active {
@@ -100,11 +100,26 @@
   font-weight: bold;
 }
 
-.logout {
+/* ログアウトの直前に置く。margin-top: auto でこのボタンから下を一番下へ寄せる */
+.theme {
   margin-top: auto;
   padding: 8px;
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: 1px solid var(--sidebar-divider);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.theme:hover {
+  background: var(--sidebar-hover);
+}
+
+.logout {
+  padding: 8px;
+  border: none;
+  border-top: 1px solid var(--sidebar-divider);
   border-radius: 0;
   background: none;
   color: inherit;
@@ -112,7 +127,7 @@
 }
 
 .logout:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--sidebar-hover);
 }
 
 /* 並び替え中の行。つかんでいる行を薄くして、どこを動かしているか分かるようにする（F-16） */

@@ -120,6 +120,41 @@ export type RestoreResult = {
   message: string | null
 }
 
+// ---------- 背景テーマ（04 4.17〜4.21） ----------
+
+export type ThemeType = 'DEFAULT' | 'PRESET' | 'CUSTOM' | 'IMAGE'
+
+/** テンプレートの名前。色は画面側の定数で持つ（features/theme/themeColors.ts） */
+export type PresetKey = 'sky' | 'sunset' | 'forest' | 'night' | 'stone'
+
+/** '#RRGGBB' の2色 */
+export type CustomColors = { sidebar: string; board: string }
+
+/** 背景画像の情報。画像の中身は /api/theme/image?v={version} で読み込む */
+export type BackgroundImageInfo = {
+  /** アップロード日時のミリ秒。置き換えたときに古いキャッシュを使わせないための版番号 */
+  version: number
+  contentType: string
+  sizeBytes: number
+}
+
+/**
+ * GET /api/theme の応答。
+ * customColors と image は、type に関係なく保存されていれば入る（パネルの初期値・縮小表示に使う）
+ */
+export type Theme = {
+  type: ThemeType
+  presetKey: PresetKey | null
+  customColors: CustomColors | null
+  image: BackgroundImageInfo | null
+}
+
+/** PUT /api/theme の本文。種類ごとに必要な項目だけを送る */
+export type ThemeUpdateRequest =
+  | { type: 'DEFAULT' | 'IMAGE' }
+  | { type: 'PRESET'; presetKey: PresetKey }
+  | { type: 'CUSTOM'; customColors: CustomColors }
+
 // ---------- エラー（04 2.6） ----------
 
 /** 入力チェック（400）のときだけ付く、項目ごとのメッセージ */

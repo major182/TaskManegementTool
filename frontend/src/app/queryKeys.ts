@@ -19,4 +19,6 @@ export const queryKeys = {
   sessionExpired: ['sessionExpired'] as const,
   /** サイドバーに出すゴミ箱の件数（GET /api/trash/count） */
   trashCount: ['trashCount'] as const,
+  /** 背景テーマ（GET /api/theme） */
+  theme: ['theme'] as const,
 }

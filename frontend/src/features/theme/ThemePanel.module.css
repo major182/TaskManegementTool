@@ -1,0 +1,164 @@
+/*
+ * テーマ変更パネル（05 画面設計書 4.7）。
+ * サイドバーのすぐ右（表示エリアの左下）に重ねる。画面全体は覆わない。
+ * パネル自身の色はテーマで変えない（どのテーマでも読めるように）。
+ */
+.panel {
+  position: fixed;
+  left: calc(var(--sidebar-width) + 12px);
+  bottom: 12px;
+  z-index: 20;
+  width: 400px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(9, 30, 66, 0.35);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.close {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-size: 18px;
+  color: var(--text-sub);
+}
+
+.close:hover {
+  background: var(--list-bg);
+}
+
+.section {
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+}
+
+.swatch:hover {
+  background: var(--list-bg);
+}
+
+/* 選ばれている見本は枠で強調する */
+.swatch.selected {
+  border-color: var(--primary);
+}
+
+.swatchColors {
+  width: 100%;
+  height: 32px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(9, 30, 66, 0.15);
+}
+
+.swatchLabel {
+  font-size: 12px;
+}
+
+.customRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.customLabel {
+  width: 72px;
+  font-size: 13px;
+}
+
+.picker {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--placeholder);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.channelInput {
+  width: 44px;
+  padding: 4px 6px;
+  border: 1px solid var(--placeholder);
+  border-radius: 4px;
+  color: var(--text);
+  text-align: right;
+}
+
+.channelInput[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.error {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cancel,
+.apply {
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.cancel {
+  background: var(--list-bg);
+  color: var(--text);
+}
+
+.apply {
+  background: var(--primary);
+  color: #fff;
+}

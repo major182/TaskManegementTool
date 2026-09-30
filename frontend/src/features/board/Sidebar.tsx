@@ -1,6 +1,6 @@
 /**
  * S-01 のサイドバー（05 画面設計書 4.2）。
- * ボードの切り替え・作成、ゴミ箱への切り替え、ログアウト。
+ * ボードの切り替え・作成、ゴミ箱への切り替え、テーマの変更、ログアウト。
  */
 import { useState } from 'react'
 import {
@@ -16,7 +16,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { InlineAddForm } from '../../components/InlineAddForm.tsx'
 import { validateName } from '../../components/InlineEdit.ts'
 import type { BoardSummary } from '../../api/types.ts'
-import { EMPTY, LIMIT } from '../../messages.ts'
+import { EMPTY, LIMIT, THEME } from '../../messages.ts'
+import { THEME_TOGGLE_ATTRIBUTE } from '../theme/ThemePanel.tsx'
 import styles from './Sidebar.module.css'
 
 type Props = {
@@ -31,6 +32,9 @@ type Props = {
   onCreateBoard: (name: string) => void
   /** 並び替え（F-16）。上から何番目に置くかを渡す */
   onMoveBoard: (boardId: number, position: number) => void
+  /** 「テーマを変更」を押した（F-61）。開いているときに押したら閉じる */
+  onToggleTheme: () => void
+  isThemeOpen: boolean
   onLogout: () => void
   isLoggingOut: boolean
 }
@@ -44,6 +48,8 @@ export function Sidebar({
   onSelectTrash,
   onCreateBoard,
   onMoveBoard,
+  onToggleTheme,
+  isThemeOpen,
   onLogout,
   isLoggingOut,
 }: Props) {
@@ -116,6 +122,17 @@ export function Sidebar({
       >
         {/* 0件のときも (0) と出す（05 画面設計書 4.2 No.4） */}
         🗑 ゴミ箱 ({trashCount})
+      </button>
+
+      {/* ゴミ箱とログアウトの間に置く（05 画面設計書 4.2 No.5） */}
+      <button
+        type="button"
+        className={styles.theme}
+        aria-expanded={isThemeOpen}
+        onClick={onToggleTheme}
+        {...{ [THEME_TOGGLE_ATTRIBUTE]: '' }}
+      >
+        {THEME.openButton}
       </button>
 
       <button type="button" className={styles.logout} onClick={onLogout} disabled={isLoggingOut}>
