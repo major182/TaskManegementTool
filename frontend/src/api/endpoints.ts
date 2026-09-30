@@ -4,6 +4,7 @@
  */
 import { api } from './client.ts'
 import type {
+  BackgroundImageInfo,
   BoardCreatedResponse,
   BoardDetail,
   BoardSummary,
@@ -121,4 +122,20 @@ export const themeApi = {
   get: () => api.get<Theme>('/theme'),
   /** テーマ変更パネルの「適用」で呼ぶ */
   update: (body: ThemeUpdateRequest) => api.put<Theme>('/theme', body),
+  /** 背景画像のアップロード。テーマは切り替わらない（04 4.19） */
+  uploadImage: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.put<BackgroundImageInfo>('/theme/image', form)
+  },
+  /** 背景画像の削除。IMAGE のテーマは DEFAULT に戻る（04 4.21） */
+  deleteImage: () => api.delete<void>('/theme/image'),
+}
+
+/**
+ * 背景画像の URL（04 4.20）。CSS の background-image や <img> で使う。
+ * 版番号を付けて、置き換えたときにブラウザの古いキャッシュを使わせない
+ */
+export function backgroundImageUrl(version: number): string {
+  return `/api/theme/image?v=${version}`
 }

@@ -13,6 +13,8 @@ export const TOAST = {
   restoredToLeftmostList: '元のリストがないため、一番左のリストに戻しました',
   listNotRestorable: '元のボードがないため戻せません',
   themeSaveFailed: 'テーマを保存できませんでした',
+  imageUploadFailed: '画像をアップロードできませんでした',
+  imageDeleteFailed: '画像を削除できませんでした',
 } as const
 
 /** トーストのボタン文言 */
@@ -36,6 +38,9 @@ export const FIELD_ERROR = {
   descriptionTooLong: '2,000文字以内で入力してください',
   /** カスタムカラーの R・G・B（業務ルール 5.7） */
   colorChannel: '0〜255 の数字で入力してください',
+  /** 背景画像（業務ルール 5.7）。画面側で先に確かめ、サーバーの 400・413 も同じ文言にする */
+  imageType: 'JPEG・PNG・WebP の画像を選んでください',
+  imageSize: '5MB 以下の画像を選んでください',
   /** 05 5章：ログイン失敗はどちらが違うか書かない（業務ルール 5.6） */
   loginFailed: 'ユーザーID またはパスワードが違います',
 } as const
@@ -64,6 +69,8 @@ export const CONFIRM = {
     `『${name}』と中のリスト・カードを完全に削除します。元に戻せません。削除しますか？`,
   emptyTrash: (count: number) =>
     `ゴミ箱の${count}件をすべて完全に削除します。元に戻せません。削除しますか？`,
+  deleteImage: '背景画像を削除します。元に戻せません。削除しますか？',
+  deleteLabel: '削除する',
   cancelLabel: 'キャンセル',
   executeLabel: '完全に削除する',
 } as const
@@ -88,4 +95,10 @@ export const THEME = {
   cancel: 'キャンセル',
   apply: '適用',
   close: '閉じる',
+  image: '背景画像',
+  upload: '画像をアップロード',
+  change: '画像を変更',
+  uploading: 'アップロード中…',
+  deleteImage: '画像を削除',
+  imageNote: 'JPEG・PNG・WebP、5MB まで',
 } as const

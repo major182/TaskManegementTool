@@ -3,6 +3,7 @@
  * 画面の部品から切り離し、計算だけを単体テストできるようにしている。
  */
 import type { CSSProperties } from 'react'
+import { backgroundImageUrl } from '../../api/endpoints.ts'
 import type { PresetKey, Theme, ThemeUpdateRequest } from '../../api/types.ts'
 
 /** サイドバーとボード表示エリアの2色の組（ツートンカラー） */
@@ -154,9 +155,23 @@ export function prefersLightText(background: string): boolean {
  *
  * 既定のテーマのときは何も上書きしない。tokens.css の値（文字色 #dfe4f0 など、
  * 計算では出てこない微妙な色）をそのまま使い、今の見た目を変えないため。
+ *
+ * @param imageVersion 背景画像の版番号。画像が無ければ null
  */
-export function themeStyle(selection: ThemeSelection): CSSProperties {
+export function themeStyle(selection: ThemeSelection, imageVersion: number | null): CSSProperties {
   if (selection.type === 'DEFAULT') return {}
+
+  if (selection.type === 'IMAGE') {
+    // 画像が無いのに IMAGE になっている（削除直後の一瞬など）ときは既定の見た目にする
+    if (imageVersion === null) return {}
+    // サイドバーは既定の濃紺のまま（業務ルール 5.7）。表示エリアだけに画像を敷く
+    return {
+      '--board-image': `url("${backgroundImageUrl(imageVersion)}")`,
+      // 画像の柄に関係なく読めるよう、見出しの帯を濃くして文字は白にする（05 画面設計書 4.7）
+      '--board-header-bg': 'rgba(0, 0, 0, 0.35)',
+      '--board-text': '#FFFFFF',
+    } as CSSProperties
+  }
 
   const { sidebar, board } = colorsOf(selection)
   const sidebarLight = prefersLightText(sidebar)

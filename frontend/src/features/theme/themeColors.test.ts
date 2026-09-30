@@ -63,17 +63,29 @@ describe('文字色の自動切り替え（05 画面設計書 4.7）', () => {
   })
 
   it('既定のテーマでは変数を上書きしない（今の見た目を変えないため）', () => {
-    expect(themeStyle({ type: 'DEFAULT' })).toEqual({})
+    expect(themeStyle({ type: 'DEFAULT' }, null)).toEqual({})
   })
 
   it('明るいカスタムカラーではサイドバーの文字を黒にする', () => {
-    const style = themeStyle({
-      type: 'CUSTOM',
-      colors: { sidebar: '#FFF0C8', board: '#1B1446' },
-    }) as Record<string, string>
+    const style = themeStyle(
+      { type: 'CUSTOM', colors: { sidebar: '#FFF0C8', board: '#1B1446' } },
+      null,
+    ) as Record<string, string>
     expect(style['--sidebar-bg']).toBe('#FFF0C8')
     expect(style['--sidebar-text']).toBe('#000000')
     expect(style['--board-text']).toBe('#FFFFFF')
+  })
+
+  it('背景画像のときは版番号付きの URL を敷き、サイドバーは既定のまま', () => {
+    const style = themeStyle({ type: 'IMAGE' }, 1759200000000) as Record<string, string>
+    expect(style['--board-image']).toBe('url("/api/theme/image?v=1759200000000")')
+    expect(style['--board-text']).toBe('#FFFFFF')
+    expect(style['--board-header-bg']).toBe('rgba(0, 0, 0, 0.35)')
+    expect(style['--sidebar-bg']).toBeUndefined()
+  })
+
+  it('画像が無いのに画像のテーマになっていたら既定の見た目にする', () => {
+    expect(themeStyle({ type: 'IMAGE' }, null)).toEqual({})
   })
 })
 

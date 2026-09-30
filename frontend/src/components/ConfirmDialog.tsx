@@ -10,11 +10,18 @@ import styles from './ConfirmDialog.module.css'
 type Props = {
   /** 表示する文言。7章の表のとおり、操作の種類ごとに呼び出し側で作る */
   message: string
+  /** 実行ボタンの文言。既定は「完全に削除する」。背景画像の削除では「削除する」（05 画面設計書 7章） */
+  executeLabel?: string
   onConfirm: () => void
   onCancel: () => void
 }
 
-export function ConfirmDialog({ message, onConfirm, onCancel }: Props) {
+export function ConfirmDialog({
+  message,
+  executeLabel = CONFIRM.executeLabel,
+  onConfirm,
+  onCancel,
+}: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
 
@@ -57,7 +64,7 @@ export function ConfirmDialog({ message, onConfirm, onCancel }: Props) {
             {CONFIRM.cancelLabel}
           </button>
           <button type="button" className={styles.execute} onClick={onConfirm}>
-            {CONFIRM.executeLabel}
+            {executeLabel}
           </button>
         </div>
       </div>

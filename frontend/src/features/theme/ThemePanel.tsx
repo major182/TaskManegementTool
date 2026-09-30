@@ -5,8 +5,11 @@
  * 選んでいる間は onPreview で画面にだけ反映し、「適用」で初めて保存する（業務ルール 5.7）。
  */
 import { useEffect, useRef, useState } from 'react'
-import type { CustomColors } from '../../api/types.ts'
-import { FIELD_ERROR, THEME } from '../../messages.ts'
+import { backgroundImageUrl } from '../../api/endpoints.ts'
+import type { BackgroundImageInfo, CustomColors } from '../../api/types.ts'
+import { ConfirmDialog } from '../../components/ConfirmDialog.tsx'
+import { CONFIRM, FIELD_ERROR, THEME } from '../../messages.ts'
+import { ACCEPTED_IMAGE_TYPES, imageUploadMessage, validateImageFile } from './useTheme.ts'
 import {
   DEFAULT_COLORS,
   PRESETS,
@@ -26,6 +29,12 @@ type Props = {
   initial: ThemeSelection
   /** 保存済みのカスタムカラー。無ければ今表示している2色を初期値にする */
   savedCustomColors: CustomColors | null
+  /** アップロード済みの背景画像。無ければ null */
+  image: BackgroundImageInfo | null
+  /** 画像を送る。形式・大きさの誤り（400・413）は例外として返す */
+  onUploadImage: (file: File) => Promise<unknown>
+  /** 画像を消す。確認ダイアログのあとで呼ばれる */
+  onDeleteImage: () => Promise<unknown>
   onPreview: (selection: ThemeSelection) => void
   onApply: (selection: ThemeSelection) => void
   onCancel: () => void
@@ -48,9 +57,28 @@ type ChannelTexts = Record<Area, Record<Channel, string>>
  */
 export const THEME_TOGGLE_ATTRIBUTE = 'data-theme-toggle'
 
-export function ThemePanel({ initial, savedCustomColors, onPreview, onApply, onCancel }: Props) {
+export function ThemePanel({
+  initial,
+  savedCustomColors,
+  image,
+  onUploadImage,
+  onDeleteImage,
+  onPreview,
+  onApply,
+  onCancel,
+}: Props) {
   const panelRef = useRef<HTMLDivElement>(null)
   const firstSwatchRef = useRef<HTMLButtonElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
+
+  // 確認ダイアログが開いている間は、Esc をダイアログのキャンセルだけに使う（パネルは閉じない）
+  const isConfirmingRef = useRef(false)
+  useEffect(() => {
+    isConfirmingRef.current = isConfirmingDelete
+  })
   const [selection, setSelection] = useState<ThemeSelection>(initial)
   const [texts, setTexts] = useState<ChannelTexts>(() =>
     toTexts(savedCustomColors ?? colorsOf(initial)),
@@ -70,7 +98,7 @@ export function ThemePanel({ initial, savedCustomColors, onPreview, onApply, onC
   // Esc・パネルの外を押したらキャンセル（05 画面設計書 4.7「動き」）
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onCancelRef.current()
+      if (event.key === 'Escape' && !isConfirmingRef.current) onCancelRef.current()
     }
     function handlePointerDown(event: Event) {
       const target = event.target
@@ -115,6 +143,42 @@ export function ThemePanel({ initial, savedCustomColors, onPreview, onApply, onC
     const colors = toColors(nextTexts)
     // 範囲外の数値があるときは、その色をプレビューに反映しない（05 画面設計書 4.7）
     if (colors) choose({ type: 'CUSTOM', colors })
+  }
+
+  /** 画像を選んだ。送る前に形式と大きさを確かめ、成功したらその画像をプレビューする */
+  async function handleFile(file: File | undefined) {
+    // 同じファイルを続けて選んでも change が起きるよう、選んだものを空に戻しておく
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (!file) return
+
+    const invalid = validateImageFile(file)
+    if (invalid) {
+      setImageError(invalid)
+      return
+    }
+
+    setImageError(null)
+    setIsUploading(true)
+    try {
+      await onUploadImage(file)
+      choose({ type: 'IMAGE' })
+    } catch (error) {
+      // 形式・大きさの誤りはパネルの中に出す。通信エラーなどはトーストで知らせ済み
+      setImageError(imageUploadMessage(error))
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  async function handleDeleteImage() {
+    setIsConfirmingDelete(false)
+    try {
+      await onDeleteImage()
+      // 画像を選んでいたら既定に戻す（サーバーも画像のテーマを既定に戻している）
+      if (selection.type === 'IMAGE') choose({ type: 'DEFAULT' })
+    } catch {
+      // 失敗はトーストで知らせ済み。パネルはそのままにする
+    }
   }
 
   const current = colorsOf(selection)
@@ -197,6 +261,72 @@ export function ThemePanel({ initial, savedCustomColors, onPreview, onApply, onC
           </p>
         )}
       </section>
+
+      <section className={styles.section} aria-label={THEME.image}>
+        <h3 className={styles.sectionTitle}>{THEME.image}</h3>
+        <div className={styles.imageRow}>
+          {image && (
+            <button
+              type="button"
+              className={`${styles.thumbnail} ${selection.type === 'IMAGE' ? styles.selected : ''}`}
+              aria-label={THEME.image}
+              aria-pressed={selection.type === 'IMAGE'}
+              onClick={() => choose({ type: 'IMAGE' })}
+            >
+              <img
+                src={backgroundImageUrl(image.version)}
+                alt=""
+                className={styles.thumbnailImage}
+              />
+            </button>
+          )}
+          <div className={styles.imageButtons}>
+            <button
+              type="button"
+              className={styles.imageButton}
+              disabled={isUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isUploading ? THEME.uploading : image ? THEME.change : THEME.upload}
+            </button>
+            {image && (
+              <button
+                type="button"
+                className={styles.imageButton}
+                disabled={isUploading}
+                onClick={() => setIsConfirmingDelete(true)}
+              >
+                {THEME.deleteImage}
+              </button>
+            )}
+          </div>
+          {/* 画面には出さず、「画像をアップロード」から開く。accept は選ぶ画面の絞り込みで、最終判定はサーバー */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="sr-only"
+            tabIndex={-1}
+            aria-label={THEME.upload}
+            accept={ACCEPTED_IMAGE_TYPES.join(',')}
+            onChange={(e) => void handleFile(e.target.files?.[0])}
+          />
+        </div>
+        <p className={styles.note}>{THEME.imageNote}</p>
+        {imageError && (
+          <p className={styles.error} role="alert">
+            {imageError}
+          </p>
+        )}
+      </section>
+
+      {isConfirmingDelete && (
+        <ConfirmDialog
+          message={CONFIRM.deleteImage}
+          executeLabel={CONFIRM.deleteLabel}
+          onConfirm={() => void handleDeleteImage()}
+          onCancel={() => setIsConfirmingDelete(false)}
+        />
+      )}
 
       <div className={styles.footer}>
         <button type="button" className={styles.cancel} onClick={onCancel}>
