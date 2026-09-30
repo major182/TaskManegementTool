@@ -16,7 +16,7 @@
 .title {
   margin: 0;
   font-size: 20px;
-  color: #fff;
+  color: var(--board-text);
 }
 
 .empty {
@@ -24,12 +24,12 @@
   padding: 6px 12px;
   border: none;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: var(--board-overlay);
+  color: var(--board-text);
 }
 
 .empty:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--board-overlay-hover);
 }
 
 .content {
@@ -40,7 +40,7 @@
 
 .emptyMessage {
   margin: 8px 0 0;
-  color: #fff;
+  color: var(--board-text);
   font-size: 15px;
 }
 

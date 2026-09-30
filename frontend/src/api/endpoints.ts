@@ -1,5 +1,5 @@
 /**
- * 04 API設計書 3章のエンドポイント21本を、1本ずつ関数にしたもの。
+ * 04 API設計書 3章のエンドポイントを、1本ずつ関数にしたもの。
  * 画面側はここだけを呼び、URL の組み立てを各所に散らさない。
  */
 import { api } from './client.ts'
@@ -15,6 +15,8 @@ import type {
   NameChangedResponse,
   RestoreResult,
   TaskList,
+  Theme,
+  ThemeUpdateRequest,
   TrashCountResponse,
   TrashItem,
   TrashType,
@@ -110,4 +112,13 @@ export const trashApi = {
   purge: (type: TrashType, id: number) => api.delete<void>(`/trash/${toTrashTypePath(type)}/${id}`),
   /** ゴミ箱を空にする。こちらも確認ダイアログのあとで呼ぶ */
   empty: () => api.delete<void>('/trash'),
+}
+
+// ---------- 背景テーマ（04 3.5-2） ----------
+
+export const themeApi = {
+  /** 一度もテーマを変えていなければ DEFAULT が返る */
+  get: () => api.get<Theme>('/theme'),
+  /** テーマ変更パネルの「適用」で呼ぶ */
+  update: (body: ThemeUpdateRequest) => api.put<Theme>('/theme', body),
 }

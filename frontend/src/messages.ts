@@ -12,6 +12,7 @@ export const TOAST = {
   notFound: 'データが見つかりません。画面を再読み込みします',
   restoredToLeftmostList: '元のリストがないため、一番左のリストに戻しました',
   listNotRestorable: '元のボードがないため戻せません',
+  themeSaveFailed: 'テーマを保存できませんでした',
 } as const
 
 /** トーストのボタン文言 */
@@ -33,6 +34,8 @@ export const FIELD_ERROR = {
   cardTitleRequired: 'タイトルを入力してください',
   cardTitleTooLong: '100文字以内で入力してください',
   descriptionTooLong: '2,000文字以内で入力してください',
+  /** カスタムカラーの R・G・B（業務ルール 5.7） */
+  colorChannel: '0〜255 の数字で入力してください',
   /** 05 5章：ログイン失敗はどちらが違うか書かない（業務ルール 5.6） */
   loginFailed: 'ユーザーID またはパスワードが違います',
 } as const
@@ -71,4 +74,18 @@ export const LIMIT = {
   listName: 50,
   cardTitle: 100,
   cardDescription: 2000,
+} as const
+
+/** 4.7 テーマ変更パネル */
+export const THEME = {
+  openButton: '🎨 テーマを変更',
+  panelTitle: 'テーマを変更',
+  templates: 'テンプレート',
+  defaultLabel: '既定',
+  custom: 'カスタムカラー',
+  sidebar: 'サイドバー',
+  board: 'ボード',
+  cancel: 'キャンセル',
+  apply: '適用',
+  close: '閉じる',
 } as const

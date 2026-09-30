@@ -20,7 +20,7 @@
   max-width: 480px;
   margin: 0;
   font-size: 20px;
-  color: #fff;
+  color: var(--board-text);
 }
 
 .delete {
@@ -29,12 +29,12 @@
   padding: 6px 12px;
   border: none;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
+  background: var(--board-overlay);
+  color: var(--board-text);
 }
 
 .delete:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--board-overlay-hover);
 }
 
 /* リストが増えたら横スクロールする（05 画面設計書 4.1） */
@@ -49,7 +49,7 @@
 
 .emptyMessage {
   margin: 8px 0 0;
-  color: #fff;
+  color: var(--board-text);
   font-size: 15px;
 }
 
@@ -59,7 +59,7 @@
   align-items: center;
   justify-content: center;
   flex: 1;
-  color: #fff;
+  color: var(--board-text);
   font-size: 15px;
 }
 
@@ -74,13 +74,13 @@
   padding: 10px 12px;
   border: none;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.24);
-  color: #fff;
+  background: var(--board-overlay);
+  color: var(--board-text);
   text-align: left;
 }
 
 .addListButton:hover {
-  background: rgba(255, 255, 255, 0.32);
+  background: var(--board-overlay-hover);
 }
 
 /* ドラッグ中に指先へ重ねて出すカード */
